@@ -24,10 +24,11 @@ fi
 for plugin in sshalt ssh
 do
 echo "Creating /tmp/mlab-nodes-$plugin from Nagios"
-curl -s $nagios_auth -o /tmp/mlab-nodes-$plugin --digest --netrc "http://nagios.measurementlab.net/baseList?show_state=1&service_name=$plugin&plugin_output=1"
+curl -s $nagios_auth -o /tmp/mlab-nodes-$plugin --digest --netrc "http://nagios.measurementlab.net/baseListnew?show_state=1&service_name=$plugin&plugin_output=1&show_problem_acknowledged=1"
 
 # Look for nodes in state 2 in baseList.pl, which indicates a bad state, 
 # and state duration of 1, a "hard" state, meaning it's been that way for a while 
+# and a problem_acknowledged state of 0, meaning not acknowledged
 
 	echo "Searching /tmp/mlab-nodes-${plugin} for nodes in hard state 2"
 	while read line
@@ -35,8 +36,10 @@ curl -s $nagios_auth -o /tmp/mlab-nodes-$plugin --digest --netrc "http://nagios.
 		host=$(echo $line | awk '{print $1 }')
 		state=$(echo $line | awk '{ print $2 }')
 		hard=$(echo $line | awk '{ print $3 }')
+		problem_acknowledged=$(echo $line | awk '{ print $4 }')
 
-		if [ $state == 2 ] && [ $hard == 1 ]
+		if [ $state == 2 ] && [ $hard == 1 ] && [ $problem_acknowledged == 0 ]
+		#if [ $state == 2 ] && [ $hard == 1 ]
 		then
 			echo $host |grep -v ^s| awk -F. '{ print $1"."$2 }' >> $ssh_outage/${plugin}_down_nodes
 			echo $host |grep ^s | awk -F. '{ print $1"."$2 }' >> $ssh_outage/${plugin}_down_switches
