@@ -39,23 +39,26 @@ ask_baselist () {
 rm -r ${SSH_OUTAGE}
 mkdir ${SSH_OUTAGE}
 
-#nagios_auth() {
-if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
-  nagios_auth='--netrc'
-else
-  read -p "Nagios login: " nagios_login
-  read -s -p "Nagios password: " nagios_pass
-  nagios_auth="--user ${nagios_login}:${nagios_pass}"
-  echo -e '\n'
-fi
-#}
 
 for plugin in sshalt ssh; do
   echo "Creating mlab_nodes_$plugin from Nagios"
 # if hostname is eb, then:
-#/etc/nagios3/baseList.pl show_state=1 service_name=$plugin plugin_output=0 show_problem_acknowledged=1 >>  ${SSH_OUTAGE}/mlab_nodes_$plugin
-# else
-  curl -s $nagios_auth -o ${SSH_OUTAGE}/mlab_nodes_$plugin --digest --netrc \
+  if [[ $(hostname -f) = "eb.measurementlab.net" ]] ; then
+    echo "We're on eb"
+    /etc/nagios3/baseList.pl show_state=1 service_name=$plugin plugin_output=0 show_problem_acknowledged=1 >>  ${SSH_OUTAGE}/mlab_nodes_$plugin
+  else
+  #nagios_auth() {
+      if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
+      nagios_auth='--netrc'
+      else
+    read -p "Nagios login: " nagios_login
+    read -s -p "Nagios password: " nagios_pass
+    nagios_auth="--user ${nagios_login}:${nagios_pass}"
+    echo -e '\n'
+  fi
+fi
+#}
+    curl -s $nagios_auth -o ${SSH_OUTAGE}/mlab_nodes_$plugin --digest --netrc \
 "http://nagios.measurementlab.net/baseList?show_state=1&service_name=$plugin&plugin_output=1&show_problem_acknowledged=1"
 done
 }
@@ -128,5 +131,5 @@ fi ;
 
 # Declare yo functions
 ask_baselist
-find_reboot_candidates
-remove_down_switches
+#find_reboot_candidates
+#remove_down_switches
