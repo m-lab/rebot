@@ -1,16 +1,22 @@
 #!/bin/bash
 #
 # Reboot crashed nodes.
-# TODO: Do appropriate var nams have curly braces?
+# TODO: Do appropriate var names have curly braces?
 # TODO: Do all repeated paths/files have working vars associated?
-# TODO: If hostname is eb, then is it running as root? If not bail out because baselist runs locally as root
 # TODO: Find out if baselist really has to be only root-executable. Without that, this wouldn't need to be run by root.
 # TODO: Are all sections that should be functions written as functions?
 # TODO: Get us to the right directory at the beginning of the script (all in /tmp/rebot?) so the script doesn't litter the system with junk files
+# TODO: This script sets the nagios server as eb.measurementlab.net. This should
+# be changed to import a general definition of the nagios server from a config
+# file common to all maintenance scripts, maybe in the operator repo
+# TODO: On eb, this script runs as root because baseList is root executable.
+# Should that be changed?
+# TODO: For cron, this script would have to be run as root because of the
+# baseList.pl permissions, see above TODO.
 
 TIMESTAMP="$(date +%F_%H-%M)"
 #SSH_OUTAGE=ssh_outage_${TIMESTAMP}
-SSH_OUTAGE=ssh_outage
+SSH_OUTAGE=/tmp/rebot/ssh_outage
 sshalt_nodes=${SSH_OUTAGE}/mlab_nodes_sshalt
 ssh_nodes=${SSH_OUTAGE}/mlab_nodes_ssh
 down_nodes_sshalt=${SSH_OUTAGE}/down_nodes_sshalt
@@ -37,29 +43,33 @@ ask_baselist () {
 
 # Clean up previous results
 rm -r ${SSH_OUTAGE}
-mkdir ${SSH_OUTAGE}
+mkdir -p ${SSH_OUTAGE}
 
-
+# Pull all results for the ssh and sshalt alerts from baseList.pl.
+# If the script is running on eb, run baseList locally. 
+# Anywhere else, use the URL of the cgi script on the Nagios server. 
+echo "Getting status of ssh and sshalt from Nagios"
 for plugin in sshalt ssh; do
-  echo "Creating mlab_nodes_$plugin from Nagios"
-# if hostname is eb, then:
+#  echo "Creating mlab_nodes_$plugin from Nagios"
   if [[ $(hostname -f) = "eb.measurementlab.net" ]] ; then
-    echo "We're on eb"
-    /etc/nagios3/baseList.pl show_state=1 service_name=$plugin plugin_output=0 show_problem_acknowledged=1 >>  ${SSH_OUTAGE}/mlab_nodes_$plugin
+    sudo /etc/nagios3/baseList.pl show_state=1 service_name=$plugin plugin_output=0 show_problem_acknowledged=1 >>  ${SSH_OUTAGE}/mlab_nodes_$plugin
   else
+
+# Nested functions aren't really a thing in bash, but save this auth function
+# for the rewrite in Python.
   #nagios_auth() {
-      if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
+    if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
       nagios_auth='--netrc'
       else
-    read -p "Nagios login: " nagios_login
-    read -s -p "Nagios password: " nagios_pass
-    nagios_auth="--user ${nagios_login}:${nagios_pass}"
-    echo -e '\n'
-  fi
-fi
+      read -p "Nagios login: " nagios_login
+      read -s -p "Nagios password: " nagios_pass
+      nagios_auth="--user ${nagios_login}:${nagios_pass}"
+      echo -e '\n'
+    fi
 #}
     curl -s $nagios_auth -o ${SSH_OUTAGE}/mlab_nodes_$plugin --digest --netrc \
 "http://nagios.measurementlab.net/baseList?show_state=1&service_name=$plugin&plugin_output=1&show_problem_acknowledged=1"
+  fi
 done
 }
 
@@ -72,9 +82,10 @@ done
 # commonalities
 
 find_reboot_candidates () {
-  #echo "Searching "${plugin}_nodes" for nodes in hard state 2"
+
+echo "Searching baseList output for nodes in hard state 2"
 for plugin in sshalt ssh; do
-  echo "Searching "${SSH_OUTAGE}/mlab_nodes_$plugin" for nodes in hard state 2"
+#  echo "Searching "${SSH_OUTAGE}/mlab_nodes_$plugin" for nodes in hard state 2"
   while read line; do
     host=$(echo $line | awk '{print $1 }')
     state=$(echo $line | awk '{ print $2 }')
@@ -107,7 +118,7 @@ if [[ -s ${down_switches} ]] ; then
   echo "Down switches:"
   cat ${down_switches}
   for line in `cat ${down_switches} | awk -F. '{ print $2 }'`; do
-    echo "Stripping $line out of reboot_candidates" 
+#    echo "Stripping $line out of reboot_candidates" 
    grep -v $line ${REBOOT_ME} > ${REBOOT_ME}.tmp
     mv  ${REBOOT_ME}.tmp ${REBOOT_ME}
   done
@@ -131,5 +142,5 @@ fi ;
 
 # Declare yo functions
 ask_baselist
-#find_reboot_candidates
-#remove_down_switches
+find_reboot_candidates
+remove_down_switches
