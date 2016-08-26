@@ -10,6 +10,10 @@
 # Should that be changed?
 # TODO: For cron, this script would have to be run as root because of the
 # baseList.pl permissions, see above TODO.
+# TODO: This version generates a trustworthy list of nodes to reboot right now.
+# Next step is to log them and make sure that current nodes haven't been
+# rebooted in the last 24 hours, and that no more than 5 nodes total are in the
+# process of being rebooted.
 
 #TIMESTAMP="$(date +%F_%H-%M)"
 #SSH_OUTAGE=ssh_outage_${TIMESTAMP}
@@ -123,11 +127,6 @@ else
   echo "No machines to reboot."
 fi ;
 }
-#cd ..
-#for line in `cat reboot_me_$timestamp`; do
-
-#find /tmp/rebot -mtime +1 -exec rm {} \;
-
 
 ########################################
 # Run the functions
