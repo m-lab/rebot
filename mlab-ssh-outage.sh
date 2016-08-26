@@ -1,17 +1,17 @@
 #!/bin/bash
 #
-# Reboot crashed nodes.
-# TODO: Find out if baselist really has to be only root-executable. Without that, this wouldn't need to be run by root.
-# TODO: Get us to the right directory at the beginning of the script (all in /tmp/rebot?) so the script doesn't litter the system with junk files
+# Reboot crashed nodes. A node is declared down if baseList.pl shows the ssh and
+# sshalt alert as down for the node, and the switch for the site is up.
+#
 # TODO: This script sets the nagios server as eb.measurementlab.net. This should
 # be changed to import a general definition of the nagios server from a config
-# file common to all maintenance scripts, maybe in the operator repo
+# file common to all maintenance scripts. (import mlabconfig ?)
 # TODO: On eb, this script runs as root because baseList is root executable.
 # Should that be changed?
 # TODO: For cron, this script would have to be run as root because of the
 # baseList.pl permissions, see above TODO.
 
-TIMESTAMP="$(date +%F_%H-%M)"
+#TIMESTAMP="$(date +%F_%H-%M)"
 #SSH_OUTAGE=ssh_outage_${TIMESTAMP}
 SSH_OUTAGE=/tmp/rebot/ssh_outage
 DOWN_NODES_SSHALT=${SSH_OUTAGE}/down_nodes_sshalt
@@ -20,15 +20,10 @@ DOWN_SWITCHES=${SSH_OUTAGE}/down_switches_ssh
 REBOOT_CANDIDATES=${SSH_OUTAGE}/reboot_candidates
 REBOOT_ME=${SSH_OUTAGE}/reboot_me
 
-#######################################
+########################################
 # Function: ask_baselist
 # Authenticate to Nagios to view baseList.pl output for ssh and sshalt
-# Globals:
-# Arguments:
-#   None
-# Returns:
-#   None
-#######################################
+########################################
 ask_baselist() {
 
 rm -r ${SSH_OUTAGE}
@@ -65,12 +60,13 @@ ${SSH_OUTAGE}/mlab_nodes_${plugin}
 done
 }
 
-#################################
+########################################
 # Function: find_reboot_candidates
 # Search the ssh and sshalt reports for nodes in state 2 (bad state),
 # duration state 2 ("hard" state, meaning it's been that way for a while),
 # and problem_acknowledged state 0 (not acknowledged).
 # Find nodes in both the down ssh and sshalt lists
+########################################
 
 find_reboot_candidates() {
 
@@ -96,20 +92,22 @@ comm --nocheck-order -12 ${DOWN_NODES_SSH} ${DOWN_NODES_SSHALT} > \
 ${REBOOT_CANDIDATES}
 }
 
-############
-# Function: strip out the nodes with a sitename that matches the sitename of any
-# down switch 
+########################################
+# Function: strip out the nodes with a sitename that matches
+# the sitename of any down switch
+########################################
+
 remove_down_switches() {
 if [ -f $SSH_OUTAGE/down_switches_sshalt ]; then
   rm $SSH_OUTAGE/down_switches_sshalt
 fi
 
 if [[ -s ${DOWN_SWITCHES} ]] ; then
-  cp ${REBOOT_CANDIDATES} ${REBOOT_ME} 
+  cp ${REBOOT_CANDIDATES} ${REBOOT_ME}
   echo "Down switches:"
   cat ${DOWN_SWITCHES}
   for line in `cat ${DOWN_SWITCHES} | awk -F. '{ print $2 }'`; do
-#    echo "Stripping $line out of reboot_candidates" 
+#    echo "Stripping $line out of reboot_candidates"
    grep -v $line ${REBOOT_ME} > ${REBOOT_ME}.tmp
     mv  ${REBOOT_ME}.tmp ${REBOOT_ME}
   done
@@ -131,7 +129,9 @@ fi ;
 #find /tmp/rebot -mtime +1 -exec rm {} \;
 
 
-# Declare yo functions
+########################################
+# Run the functions
+########################################
 ask_baselist
 find_reboot_candidates
 remove_down_switches
