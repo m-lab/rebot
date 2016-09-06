@@ -17,12 +17,12 @@
 
 #TIMESTAMP="$(date +%F_%H-%M)"
 #SSH_OUTAGE=ssh_outage_${TIMESTAMP}
-SSH_OUTAGE=/tmp/rebot/ssh_outage
-DOWN_NODES_SSHALT=${SSH_OUTAGE}/down_nodes_sshalt
-DOWN_NODES_SSH=${SSH_OUTAGE}/down_nodes_ssh
-DOWN_SWITCHES=${SSH_OUTAGE}/down_switches_ssh
-REBOOT_CANDIDATES=${SSH_OUTAGE}/reboot_candidates
-REBOOT_ME=${SSH_OUTAGE}/reboot_me
+SSH_OUTAGE="/tmp/rebot/ssh_outage"
+DOWN_NODES_SSHALT="${SSH_OUTAGE}/down_nodes_sshalt"
+DOWN_NODES_SSH="${SSH_OUTAGE}/down_nodes_ssh"
+DOWN_SWITCHES="${SSH_OUTAGE}/down_switches_ssh"
+REBOOT_CANDIDATES="${SSH_OUTAGE}/reboot_candidates"
+REBOOT_ME="${SSH_OUTAGE}/reboot_me"
 
 ########################################
 # Function: ask_baselist
@@ -30,17 +30,17 @@ REBOOT_ME=${SSH_OUTAGE}/reboot_me
 ########################################
 ask_baselist() {
 
-rm -r ${SSH_OUTAGE}
-mkdir -p ${SSH_OUTAGE}
+rm -r "${SSH_OUTAGE}"
+mkdir -p "${SSH_OUTAGE}"
 
 # If the script is running on eb, run baseList locally. 
 # Anywhere else, use the URL of the cgi script on the Nagios server. 
 echo "Getting status of ssh and sshalt from Nagios"
 for plugin in sshalt ssh; do
-  if [[ $(hostname -f) = "eb.measurementlab.net" ]] ; then
-    sudo /etc/nagios3/baseList.pl show_state=1 service_name=${plugin} \
+  if [[ "$(hostname -f)" = "eb.measurementlab.net" ]] ; then
+    sudo /etc/nagios3/baseList.pl show_state=1 service_name="${plugin}" \
 plugin_output=0 show_problem_acknowledged=1 >> \
-${SSH_OUTAGE}/mlab_nodes_${plugin}
+"${SSH_OUTAGE}/mlab_nodes_${plugin}"
   else
 
 # Nested functions aren't really a thing in bash, but save this auth function
@@ -58,8 +58,8 @@ ${SSH_OUTAGE}/mlab_nodes_${plugin}
       echo -e '\n'
     fi
 #}
-    curl -s $nagios_auth -o ${SSH_OUTAGE}/mlab_nodes_${plugin} --digest --netrc \
-"http://nagios.measurementlab.net/baseList?show_state=1&service_name=${plugin}&plugin_output=1&show_problem_acknowledged=1"
+    curl -s "${nagios_auth}" -o "${SSH_OUTAGE}"/mlab_nodes_"${plugin}" --digest --netrc \
+"http://nagios.measurementlab.net/baseList?show_state=1&service_name="${plugin}"&plugin_output=1&show_problem_acknowledged=1"
   fi
 done
 }
@@ -77,23 +77,23 @@ find_reboot_candidates() {
 echo "Searching baseList output for nodes in hard state 2"
 for plugin in sshalt ssh; do
   while read line; do
-    host=$(echo $line | awk '{print $1 }')
-    state=$(echo $line | awk '{ print $2 }')
-    hard=$(echo $line | awk '{ print $3 }')
-    problem_acknowledged=$(echo $line | awk '{ print $4 }')
+    host="$(echo $line | awk '{print $1 }')"
+    state="$(echo $line | awk '{ print $2 }')"
+    hard="$(echo $line | awk '{ print $3 }')"
+    problem_acknowledged="$(echo $line | awk '{ print $4 }')"
 
-    if [[ $state == 2 ]] && [[ $hard == 1 ]] && \
-    [[ $problem_acknowledged == 0 ]]; then
-      echo $host |grep -v ^s| awk -F. '{ print $1"."$2 }' \
-      >> $SSH_OUTAGE/down_nodes_${plugin}
-      echo $host |grep ^s | awk -F. '{ print $1"."$2 }' \
-      >> $SSH_OUTAGE/down_switches_${plugin}
+    if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
+    [[ "$problem_acknowledged" == 0 ]]; then
+      echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
+      >> "${SSH_OUTAGE}/down_nodes_${plugin}"
+      echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
+      >> "${SSH_OUTAGE}/down_switches_${plugin}"
     fi
       done < "${SSH_OUTAGE}/mlab_nodes_${plugin}"
   done
 
-comm --nocheck-order -12 ${DOWN_NODES_SSH} ${DOWN_NODES_SSHALT} > \
-${REBOOT_CANDIDATES}
+comm --nocheck-order -12 "${DOWN_NODES_SSH}" "${DOWN_NODES_SSHALT}" > \
+"${REBOOT_CANDIDATES}"
 }
 
 ########################################
@@ -102,27 +102,27 @@ ${REBOOT_CANDIDATES}
 ########################################
 
 remove_down_switches() {
-if [ -f $SSH_OUTAGE/down_switches_sshalt ]; then
-  rm $SSH_OUTAGE/down_switches_sshalt
+if [ -f "${SSH_OUTAGE}/down_switches_sshalt" ]; then
+  rm "${SSH_OUTAGE}/down_switches_sshalt"
 fi
 
-if [[ -s ${DOWN_SWITCHES} ]] ; then
-  cp ${REBOOT_CANDIDATES} ${REBOOT_ME}
+if [[ -s "${DOWN_SWITCHES}" ]] ; then
+  cp "${REBOOT_CANDIDATES}" "${REBOOT_ME}"
   echo "Down switches:"
-  cat ${DOWN_SWITCHES}
-  for line in `cat ${DOWN_SWITCHES} | awk -F. '{ print $2 }'`; do
+  cat "${DOWN_SWITCHES}"
+  for line in `cat "${DOWN_SWITCHES}" | awk -F. '{ print $2 }'`; do
 #    echo "Stripping $line out of reboot_candidates"
-   grep -v $line ${REBOOT_ME} > ${REBOOT_ME}.tmp
-    mv  ${REBOOT_ME}.tmp ${REBOOT_ME}
+   grep -v $line "${REBOOT_ME}" > "${REBOOT_ME}".tmp
+    mv  "${REBOOT_ME}".tmp "${REBOOT_ME}"
   done
 else
   echo "No down switches"
-  cat ${REBOOT_CANDIDATES} > ${REBOOT_ME}
+  cat "${REBOOT_CANDIDATES}" > "${REBOOT_ME}"
 fi ;
 
-if [[ -s ${REBOOT_ME} ]] ; then
+if [[ -s "${REBOOT_ME}" ]] ; then
   echo "Please reboot these:"
-  cat ${REBOOT_ME}
+  cat "${REBOOT_ME}"
 else
   echo "No machines to reboot."
 fi ;
