@@ -26,22 +26,22 @@
 # during the next run?
 
 TIMESTAMP="$(date -u +%F_%H-%M)"
-#REBOT_LOG_DIR="/tmp/rebot"
-REBOT_LOG_DIR="/tmp/rebot-testing"
-SSH_OUTAGE="${REBOT_LOG_DIR}/ssh_outage"
-REBOOT_HISTORY="${REBOT_LOG_DIR}/reboot_history"
-DOWN_NODES_SSHALT="${SSH_OUTAGE}/down_hosts_sshalt"
-DOWN_NODES_SSH="${SSH_OUTAGE}/down_hosts_ssh"
-DOWN_SWITCHES="${SSH_OUTAGE}/down_switches_ssh"
-REBOOT_CANDIDATES="${SSH_OUTAGE}/reboot_candidates"
-REBOOT_CANDIDATES_1="${SSH_OUTAGE}/reboot_candidates.1"
-REBOOT_ME="${SSH_OUTAGE}/reboot_me"
-REBOOT_ATTEMPTED="${REBOOT_HISTORY}/reboot_attempted"
-REBOOT_LOG="${REBOOT_HISTORY}/reboot_log"
-REBOOT_RUNNING_LOG="${REBOOT_HISTORY}/reboot_running_log"
-PROBLEMATIC="${REBOOT_HISTORY}/problematic"
 EPOCH_NOW="$(date -u +%s)"
 EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
+#REBOT_LOG_DIR="/tmp/rebot"
+REBOT_LOG_DIR="/tmp/rebot-testing"
+SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
+REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
+DOWN_NODES_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
+DOWN_NODES_SSH="${SSH_OUTAGE_TEMP_DIR}/down_hosts_ssh"
+DOWN_SWITCHES="${SSH_OUTAGE_TEMP_DIR}/down_switches_ssh"
+REBOOT_CANDIDATES="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates"
+REBOOT_CANDIDATES_1="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates.1"
+REBOOT_ME="${SSH_OUTAGE_TEMP_DIR}/reboot_me"
+REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
+REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
+REBOOT_RUNNING_LOG="${REBOOT_HISTORY_DIR}/reboot_running_log"
+PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
 
 ########################################
 # Function: find_all_hosts 
@@ -51,47 +51,33 @@ EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
 # OR, when fixed, host_name=all
 # plugin_output=0 (no, don't show output, not needed)
 # show_problem_acknowledged=1 (yes, show whether acknowledged)
-# Makes a fresh $SSH_OUTAGE dir on each run
-# Creates files $SSH_OUTAGE/all_hosts_ssh and $SSH_OUTAGE/all_hosts_sshalt
+# Makes a fresh $SSH_OUTAGE_TEMP_DIR on each run
+# Creates files $SSH_OUTAGE_TEMP_DIR/all_hosts_ssh and $SSH_OUTAGE_TEMP_DIR/all_hosts_sshalt
 ########################################
 find_all_hosts() {
 echo "###########################"
 echo "Starting find_all_hosts()"
-rm -r "${SSH_OUTAGE}"
-mkdir -p "${SSH_OUTAGE}"
+rm -r "${SSH_OUTAGE_TEMP_DIR}"
+mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
 echo "This directory gets recreated with fresh status files every time \
-rebot runs." > "${SSH_OUTAGE}/README"
-
+rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
 echo "Getting status of ssh and sshalt from Nagios"
 for plugin in ssh sshalt; do
 
-# If the script is running on eb, run baseList locally.
-# Anywhere else, use the URL of the cgi script on the Nagios server.
-  if [[ "$(hostname -f)" = "eb.measurementlab.net" ]] ; then
-    sudo /etc/nagios3/baseList.pl show_state=1 service_name="${plugin}" \
-plugin_output=0&show_problem_acknowledged=1 >> \
-"${SSH_OUTAGE}/all_hosts_${plugin}"
-  else
-
-# Nested functions aren't really a thing in bash, but save this auth function
-# for the rewrite in Python.
 # Configure a user's login to Nagios.  For more information on netrc files, see
 # the manpage for curl.  If a netrc file doesn't exist, then the user will be
 # prompted to enter credentials.
-  #nagios_auth() {
-    if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
-      nagios_auth='--netrc'
-      else
-      read -p "Nagios login: " nagios_login
-      read -s -p "Nagios password: " nagios_pass
-      nagios_auth="--user ${nagios_login}:${nagios_pass}"
-      echo -e '\n'
-    fi
-#}
+if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
+  nagios_auth='--netrc'
+else
+  read -p "Nagios login: " nagios_login
+  read -s -p "Nagios password: " nagios_pass
+  nagios_auth="--user ${nagios_login}:${nagios_pass}"
+  echo -e '\n'
+fi
 
-    curl -s "${nagios_auth}" -o "${SSH_OUTAGE}"/all_hosts_"${plugin}" --digest --netrc \
-"http://nagios.measurementlab.net/baseList?show_state=1&service_name="${plugin}"&plugin_output=0&show_problem_acknowledged=1"
-  fi
+curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"${plugin}" --digest --netrc \
+  "http://nagios.measurementlab.net/baseList?show_state=1&service_name="${plugin}"&plugin_output=0&show_problem_acknowledged=1"
 done
 }
 
@@ -111,23 +97,23 @@ echo "Searching baseList output for hosts in hard state 1"
 for plugin in "ssh" "sshalt"; do
   # Make the down_hosts file creation idempotent so we can append inside the
   # loop without getting unintended appended node lists from run to run
-  if [ -f "${SSH_OUTAGE}/down_hosts_${plugin}" ]; then
-    rm "${SSH_OUTAGE}/down_hosts_${plugin}"
+  if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${plugin}" ]; then
+    rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${plugin}"
   fi
   while read line; do
     host="$(echo $line | awk '{print $1 }')"
     state="$(echo $line | awk '{ print $2 }')"
     hard="$(echo $line | awk '{ print $3 }')"
     problem_acknowledged="$(echo $line | awk '{ print $4 }')"
-if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
+    if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
     [[ "$problem_acknowledged" == 0 ]]; then
       echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
-      >> "${SSH_OUTAGE}/down_hosts_${plugin}"
+      >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${plugin}"
       echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
-      >> "${SSH_OUTAGE}/down_switches_${plugin}"
+      >> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${plugin}"
     fi
-      done < "${SSH_OUTAGE}/all_hosts_${plugin}"
-  done
+  done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${plugin}"
+done
 if [[ -s "${DOWN_NODES_SSH}" ]] && [[ -s "${DOWN_NODES_SSHALT}" ]]; then
   echo "There are down hosts to check; continuing"
   else echo "There are no down hosts; exiting"
@@ -153,18 +139,17 @@ cat "${REBOOT_CANDIDATES}"
 echo ""
 # The sshalt plugin doesn't report switches, but this file is risidual of the
 # loop above and isn't needed.
-if [ -f "${SSH_OUTAGE}/down_switches_sshalt" ]; then
-  rm "${SSH_OUTAGE}/down_switches_sshalt"
+if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_sshalt" ]; then
+  rm "${SSH_OUTAGE_TEMP_DIR}/down_switches_sshalt"
 fi
 
 echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
 if [[ -s "${DOWN_SWITCHES}" ]] ; then
-  #cp "${REBOOT_CANDIDATES}" "${REBOOT_ME}"
   echo "Down switches:"
   cat "${DOWN_SWITCHES}"
   for line in `cat "${DOWN_SWITCHES}" | awk -F. '{ print $2 }'`; do
     echo "Stripping $line out of REBOOT_CANDIDATES"
-   grep -v $line "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+    grep -v $line "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
     mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
   done
 else
@@ -197,10 +182,10 @@ echo "Starting did_they_come_back()"
 #echo "Contents of REBOOT_CANDIDATES:"
 #cat ${REBOOT_CANDIDATES}
 #echo ""
-for line in `cat ${REBOOT_ATTEMPTED}`; do
-echo "Line is:" $line
+for line in `cat "${REBOOT_ATTEMPTED}"`; do
+  echo "Line is:" $line
   for host in `echo $line | awk -F: '{ print $1 }'`; do
-echo "Host is:" $host
+    echo "Host is:" $host
     if grep -q $host "${REBOOT_CANDIDATES}" ; then
       cp "${REBOOT_CANDIDATES}" "${REBOOT_CANDIDATES}".$TIMESTAMP
       echo "$host attempted to boot during the last run but is still down. Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
@@ -240,28 +225,30 @@ echo "Starting has_it_been_24_hrs"
 #echo "Contents of REBOOT_RUNNING_LOG (/tmp/rebot-testing/reboot_history/reboot_running_log:"
 #cat ${REBOOT_RUNNING_LOG}
 echo ""
-for host in `cat ${REBOOT_CANDIDATES}`; do
+for host in `cat "${REBOOT_CANDIDATES}"`; do
   if grep -q $host "${REBOOT_RUNNING_LOG}" ; then
-#    echo "$host found in REBOOT_RUNNING_LOG. Grabbing previous reboot timestamp."
+    # echo "$host found in REBOOT_RUNNING_LOG. Grabbing previous reboot timestamp."
     PREVIOUS_REBOOT=`grep $host $REBOOT_RUNNING_LOG |awk -F: '{print $3 }'`
-#    echo "Previous reboot:" $PREVIOUS_REBOOT
+    # echo "Previous reboot:" $PREVIOUS_REBOOT
     SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
     echo "Seconds since "$host"'s previous reboot (should be more than 86400):" $SECONDS_SINCE_REBOOT
-#    echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
-      if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
-        echo "More than a day since $host was rebooted. Ok to reboot."
-      else
-        echo "Less than a day since $host was rebooted. Not ok to reboot."
-        grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-        mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
-      fi
+    # echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
+    if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
+      echo "More than a day since $host was rebooted. Ok to reboot."
+    else
+      echo "Less than a day since $host was rebooted. Not ok to reboot."
+      grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+      mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+    fi
   else
     echo "$host is not present in the REBOOT_RUNNING_LOG. Ok to proceed."
   fi
 done
 
 echo "New Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
-cat ${REBOOT_CANDIDATES}
+for line in `cat "${REBOOT_CANDIDATES}"`; do
+  echo $line":"$TIMESTAMP":"$EPOCH_NOW
+done
 echo ""
 }
 
@@ -280,9 +267,9 @@ if [[ -s "${REBOOT_ME}" ]] ; then
   echo "Please reboot these:"
   cat "${REBOOT_ME}"
   for line in `cat "${REBOOT_ME}"`; do
-    echo $line":"$TIMESTAMP":"$EPOCH_NOW >> ${REBOOT_ATTEMPTED}
-#  echo $host":"$TIMESTAMP":"$EPOCH_NOW >> ${REBOOT_LOG}
-    done
+    echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
+    # echo $host":"$TIMESTAMP":"$EPOCH_NOW >> ${REBOOT_LOG}
+  done
 else
   echo "No machines to reboot."
 fi ;
