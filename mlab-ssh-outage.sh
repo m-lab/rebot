@@ -55,12 +55,17 @@ PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
 # Creates files $SSH_OUTAGE_TEMP_DIR/all_hosts_ssh and $SSH_OUTAGE_TEMP_DIR/all_hosts_sshalt
 ########################################
 find_all_hosts() {
-echo "###########################"
-echo "Starting find_all_hosts()"
 rm -r "${SSH_OUTAGE_TEMP_DIR}"
 mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
 echo "This directory gets recreated with fresh status files every time \
 rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
+
+if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
+  mkdir "${REBOOT_HISTORY_DIR}"
+fi
+
+echo "###########################"
+echo "Starting find_all_hosts()"
 echo "Getting status of ssh and sshalt from Nagios"
 for plugin in ssh sshalt; do
 
@@ -131,7 +136,7 @@ find_reboot_candidates() {
 echo "###########################"
 echo "Starting find_reboot_candidates()"
 # If both ssh and sshalt are both down, they go on the "maybe" list
-comm --nocheck-order -12 "${DOWN_NODES_SSH}" "${DOWN_NODES_SSHALT}" > \
+comm -12 <( sort "${DOWN_NODES_SSH}") <( sort "${DOWN_NODES_SSHALT}" ) > \
 "${REBOOT_CANDIDATES}"
 
 echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
@@ -188,12 +193,14 @@ for line in `cat "${REBOOT_ATTEMPTED}"`; do
     echo "Host is:" $host
     if grep -q $host "${REBOOT_CANDIDATES}" ; then
       cp "${REBOOT_CANDIDATES}" "${REBOOT_CANDIDATES}".$TIMESTAMP
-      echo "$host attempted to boot during the last run but is still down. Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
+      echo "$host attempted to boot during the last run but is still down.
+        Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
       echo $host" still not up but requested during last run:" $line >> $PROBLEMATIC
       grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
       mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
     else
-      echo "Logging $host in REBOOT_RUNNING_LOG and scrubbing from REBOOT_ATTEMPTED because its reboot succeeded."
+      echo "Logging $host in REBOOT_RUNNING_LOG and scrubbing from
+        REBOOT_ATTEMPTED because its reboot succeeded."
       cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
       grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
       mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
