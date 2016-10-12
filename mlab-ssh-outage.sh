@@ -84,7 +84,10 @@ fi
 curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"${plugin}" --digest --netrc \
   "http://nagios.measurementlab.net/baseList?show_state=1&service_name="${plugin}"&plugin_output=0&show_problem_acknowledged=1"
 done
-# http://nagios.measurementlab.net/cgi-bin/nagios3/status.cgi?host=mlab1.ath03.measurement-lab.org&style=detail
+# http://nagios.measurementlab.net/baseList?show_state=1&plugin_output=1
+# http://nagios.measurementlab.net/baseList?show_state=1&service_name=ssh&plugin_output=0&show_problem_acknowledged=1"
+# http://nagios.measurementlab.net/baseList?show_state=1&service_name=sshalt&plugin_output=0&show_problem_acknowledged=1"
+# http://nagios.measurementlab.net/baseList?show_state=1&plugin_output=0&show_problem_acknowledged=1"
 
 }
 
