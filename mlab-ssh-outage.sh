@@ -24,6 +24,7 @@
 # TODO: What should we do with any hosts over the 5-host limit? Ignore and wait
 # for the next run? Put them at the top of the queue if they are still down
 # during the next run?
+# TODO: Add tests for null response, from baseList and anywhere else that it matters
 
 TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
@@ -32,8 +33,10 @@ EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
 REBOT_LOG_DIR="/tmp/rebot-testing"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
-DOWN_NODES_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
+ALL_NODES_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
+ALL_NODES_SSHALT="${SSH_OUTAGE_TEMP_DIR}/all_hosts_sshalt"
 DOWN_NODES_SSH="${SSH_OUTAGE_TEMP_DIR}/down_hosts_ssh"
+DOWN_NODES_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
 DOWN_SWITCHES="${SSH_OUTAGE_TEMP_DIR}/down_switches_ssh"
 REBOOT_CANDIDATES="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates"
 REBOOT_CANDIDATES_1="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates.1"
@@ -42,6 +45,22 @@ REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
 REBOOT_RUNNING_LOG="${REBOOT_HISTORY_DIR}/reboot_running_log"
 PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
+
+########################################
+# Function: fresh_dirs
+# Make a fresh SSH_OUTAGE_TEMP_DIR
+# Make a persistent REBOOT_HISTORY_DIR if it doesn't already exist
+########################################
+rm -r "${SSH_OUTAGE_TEMP_DIR}"
+mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
+echo "This directory gets recreated with fresh status files every time \
+rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
+
+if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
+  mkdir "${REBOOT_HISTORY_DIR}"
+  echo "This is a persistent directory that holds historical reboot \
+  information." > "${REBOOT_HISTORY_DIR}/README"
+fi
 
 ########################################
 # Function: find_all_hosts 
@@ -55,19 +74,9 @@ PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
 # Creates files $SSH_OUTAGE_TEMP_DIR/all_hosts_ssh and $SSH_OUTAGE_TEMP_DIR/all_hosts_sshalt
 ########################################
 find_all_hosts() {
-rm -r "${SSH_OUTAGE_TEMP_DIR}"
-mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
-echo "This directory gets recreated with fresh status files every time \
-rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
-
-if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
-  mkdir "${REBOOT_HISTORY_DIR}"
-fi
 
 echo "###########################"
-echo "Starting find_all_hosts()"
-echo "Getting status of ssh and sshalt from Nagios"
-for plugin in ssh sshalt; do
+echo "Starting find_all_hosts(). Getting status of $1 from Nagios."
 
 # Configure a user's login to Nagios.  For more information on netrc files, see
 # the manpage for curl.  If a netrc file doesn't exist, then the user will be
@@ -81,14 +90,9 @@ else
   echo -e '\n'
 fi
 
-curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"${plugin}" --digest --netrc \
-  "http://nagios.measurementlab.net/baseList?show_state=1&service_name="${plugin}"&plugin_output=0&show_problem_acknowledged=1"
-done
-# http://nagios.measurementlab.net/baseList?show_state=1&plugin_output=1
-# http://nagios.measurementlab.net/baseList?show_state=1&service_name=ssh&plugin_output=0&show_problem_acknowledged=1"
-# http://nagios.measurementlab.net/baseList?show_state=1&service_name=sshalt&plugin_output=0&show_problem_acknowledged=1"
-# http://nagios.measurementlab.net/baseList?show_state=1&plugin_output=0&show_problem_acknowledged=1"
-
+curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" --digest --netrc \
+  "http://nagios.measurementlab.net/baseList?show_state=1&service_name="$1"&plugin_output=0&show_problem_acknowledged=1"
+ls -l "${SSH_OUTAGE_TEMP_DIR}"
 }
 
 ########################################
@@ -287,10 +291,18 @@ else
 fi ;
 }
 
+
+function quit {
+  exit
+}
+
+
 ########################################
 # Run the functions
 ########################################
-find_all_hosts
+fresh_dirs
+find_all_hosts ssh
+find_all_hosts sshalt
 find_down_hosts
 find_reboot_candidates
 did_they_come_back
