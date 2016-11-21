@@ -25,6 +25,9 @@
 # for the next run? Put them at the top of the queue if they are still down
 # during the next run?
 # TODO: Add tests for null response, from baseList and anywhere else that it matters
+# TODO: Split the find_all_hosts function into two, one for sshalt and one for 
+# hosts. The baseList URL for hosts (including switches) will be different 
+# enough that just changing the plugin name won't work.
 
 TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
@@ -33,8 +36,8 @@ EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
 REBOT_LOG_DIR="/tmp/rebot-testing"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
-ALL_NODES_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
-ALL_NODES_SSHALT="${SSH_OUTAGE_TEMP_DIR}/all_hosts_sshalt"
+ALL_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
+ALL_HOSTS_SSHALT="${SSH_OUTAGE_TEMP_DIR}/all_hosts_sshalt"
 DOWN_NODES_SSH="${SSH_OUTAGE_TEMP_DIR}/down_hosts_ssh"
 DOWN_NODES_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
 DOWN_SWITCHES="${SSH_OUTAGE_TEMP_DIR}/down_switches_ssh"
@@ -51,16 +54,20 @@ PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
 # Make a fresh SSH_OUTAGE_TEMP_DIR
 # Make a persistent REBOOT_HISTORY_DIR if it doesn't already exist
 ########################################
+fresh_dirs() {
+echo "#### Starting fresh_dirs(). Resetting the output dir. ####"
+
 rm -r "${SSH_OUTAGE_TEMP_DIR}"
 mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
 echo "This directory gets recreated with fresh status files every time \
-rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
+  rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
 
 if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
   mkdir "${REBOOT_HISTORY_DIR}"
   echo "This is a persistent directory that holds historical reboot \
-  information." > "${REBOOT_HISTORY_DIR}/README"
+    information." > "${REBOOT_HISTORY_DIR}/README"
 fi
+}
 
 ########################################
 # Function: find_all_hosts 
@@ -74,9 +81,7 @@ fi
 # Creates files $SSH_OUTAGE_TEMP_DIR/all_hosts_ssh and $SSH_OUTAGE_TEMP_DIR/all_hosts_sshalt
 ########################################
 find_all_hosts() {
-
-echo "###########################"
-echo "Starting find_all_hosts(). Getting status of $1 from Nagios."
+echo "#### Starting find_all_hosts(). Getting status of $1 from Nagios. ####"
 
 # Configure a user's login to Nagios.  For more information on netrc files, see
 # the manpage for curl.  If a netrc file doesn't exist, then the user will be
@@ -92,7 +97,16 @@ fi
 
 curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" --digest --netrc \
   "http://nagios.measurementlab.net/baseList?show_state=1&service_name="$1"&plugin_output=0&show_problem_acknowledged=1"
-ls -l "${SSH_OUTAGE_TEMP_DIR}"
+
+# TODO: Make this a unit test
+if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
+#  echo "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" exists
+  true
+else
+  echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's possible \
+    the connection to the Nagios server failed."
+  echo ""
+fi ;
 }
 
 ########################################
@@ -101,77 +115,96 @@ ls -l "${SSH_OUTAGE_TEMP_DIR}"
 # duration state 1 ("hard" state, meaning it's been that way for a while),
 # and problem_acknowledged state 0 (not acknowledged).
 # If there are hosts in state "2 1 0",
-# creates files down_hosts_ssh and/or down_hosts_sshalt, and down_switches 
+# create files DOWN_HOSTS_SSH and/or DOWN_HOSTS_SSHALT, and DOWN_SWITCHES_SSH
 # Find hosts in both the down ssh and sshalt lists
+# Inputs: ALL_HOSTS_SSH, ALL_HOSTS_SSHALT
+# Outputs: DOWN_HOSTS_SSH, DOWN_HOSTS_SSHALT, DOWN_SWITCHES_SSH
 ########################################
 find_down_hosts() {
-echo "###########################"
-echo "Starting find_down_hosts()"
-echo "Searching baseList output for hosts in hard state 1"
-for plugin in "ssh" "sshalt"; do
-  # Make the down_hosts file creation idempotent so we can append inside the
-  # loop without getting unintended appended node lists from run to run
-  if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${plugin}" ]; then
-    rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${plugin}"
-  fi
-  while read line; do
-    host="$(echo $line | awk '{print $1 }')"
-    state="$(echo $line | awk '{ print $2 }')"
-    hard="$(echo $line | awk '{ print $3 }')"
-    problem_acknowledged="$(echo $line | awk '{ print $4 }')"
-    if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
-    [[ "$problem_acknowledged" == 0 ]]; then
-      echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
-      >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${plugin}"
-      echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
-      >> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${plugin}"
-    fi
-  done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${plugin}"
-done
-if [[ -s "${DOWN_NODES_SSH}" ]] && [[ -s "${DOWN_NODES_SSHALT}" ]]; then
-  echo "There are down hosts to check; continuing"
-  else echo "There are no down hosts; exiting"
-  exit
+echo "#### Starting find_down_hosts(), hosts in hard state 1 for $1 ####"
+
+# Make the down_hosts file creation idempotent to avoid unintentional appends
+if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}" ]; then
+  rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
 fi
+
+if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}" ]; then
+  rm "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
+fi
+
+while read line; do
+  host="$(echo $line | awk '{print $1 }')"
+  state="$(echo $line | awk '{ print $2 }')"
+  hard="$(echo $line | awk '{ print $3 }')"
+  problem_acknowledged="$(echo $line | awk '{ print $4 }')"
+  if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
+    [[ "$problem_acknowledged" == 0 ]]; then
+    echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
+      >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
+    echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
+      >> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
+  fi
+done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${1}"
+
 }
 
 ########################################
-# Function: strip out the hosts with a sitename that matches
-# the sitename of any down switch
-# Input: DOWN_SWITCHES
+# Function: no_down_nodes
+# Exit here if there are no nodes reporting down.
+# Supporting "Blue skies" as an M-Lab standard for reporting good news. :-)
+# Inputs: DOWN_NODES_SSH, DOWN_NODES_SSHALT
+########################################
+no_down_nodes() {
+echo "#### Starting no_down_nodes() ####"
+
+if [[ -s "${DOWN_NODES_SSH}" ]] && [[ -s "${DOWN_NODES_SSHALT}" ]]; then
+  # echo "There are down hosts to check; continuing"
+  true
+else echo "Blue skies: There are no down hosts; exiting"
+  exit
+fi
+
+}
+
+########################################
+# Function: find_reboot_candidates
+# Find nodes that are down according to both ssh and sshalt checks.
+# Strip out hosts associated with a down switch
+# Inputs: DOWN_NODES_SSH, DOWN_NODES_SSHALT, DOWN_SWITCHES
 # Output: REBOOT_CANDIDATES
 ########################################
 find_reboot_candidates() {
-echo "###########################"
-echo "Starting find_reboot_candidates()"
-# If both ssh and sshalt are both down, they go on the "maybe" list
+echo "#### Starting find_reboot_candidates() ####"
+
+# If a node's ssh and sshalt are both down, it goes on the "maybe" list
 comm -12 <( sort "${DOWN_NODES_SSH}") <( sort "${DOWN_NODES_SSHALT}" ) > \
-"${REBOOT_CANDIDATES}"
+  "${REBOOT_CANDIDATES}"
 
-echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
-cat "${REBOOT_CANDIDATES}"
-echo ""
-# The sshalt plugin doesn't report switches, but this file is risidual of the
-# loop above and isn't needed.
-if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_sshalt" ]; then
-  rm "${SSH_OUTAGE_TEMP_DIR}/down_switches_sshalt"
-fi
+# TODO: Make this a unit test
+# echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
+# cat "${REBOOT_CANDIDATES}"
+# echo ""
 
+# TODO: email interested parties. "Interested parties" seems like a candidate
+# for an M-Lab env var/M-Lab module.
 echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
 if [[ -s "${DOWN_SWITCHES}" ]] ; then
-  echo "Down switches:"
+  echo "Down switches! This shouldn't happen; please investigate and ask site
+    partners to reboot the switch if needed."
   cat "${DOWN_SWITCHES}"
-  for line in `cat "${DOWN_SWITCHES}" | awk -F. '{ print $2 }'`; do
-    echo "Stripping $line out of REBOOT_CANDIDATES"
-    grep -v $line "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+  echo ""
+  for switch in `cat "${DOWN_SWITCHES}" | awk -F. '{ print $2 }'`; do
+    grep -v $switch "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
     mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
   done
-else
-  echo "No down switches"
-  echo ""
 fi ;
-echo "New Contents of REBOOT_CANDIDATES:"
-cat "${REBOOT_CANDIDATES}"
+
+echo "Switch-free Contents of REBOOT_CANDIDATES:"
+if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
+  cat "${REBOOT_CANDIDATES}"
+  echo ""
+else echo "Blue skies: There are no new reboot candidates."
+fi ;
 }
 
 ########################################
@@ -188,8 +221,8 @@ cat "${REBOOT_CANDIDATES}"
 # Output PROBLEMATIC 
 ########################################
 did_they_come_back() {
-echo "###########################"
-echo "Starting did_they_come_back()"
+echo "#### Starting did_they_come_back() ####"
+
 #echo "Contents of REBOOT_ATTEMPTED:"
 #cat ${REBOOT_ATTEMPTED}
 #echo ""
@@ -233,8 +266,7 @@ done
 # Output: REBOOT_CANDIDATES
 ########################################
 has_it_been_24_hrs() {
-echo "###########################"
-echo "Starting has_it_been_24_hrs" 
+echo "#### Starting has_it_been_24_hrs ####" 
 
 #echo "Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
 #cat ${REBOOT_CANDIDATES}
@@ -276,15 +308,14 @@ echo ""
 # Takes REBOOT_ME as input, write to REBOOT_ATTEMPTED
 ########################################
 perform_the_reboot() {
-echo "###########################"
-echo "Starting perform_the_reboot"
-# head -5 "${REBOOT_CANDIDATES} > "${REBOOT_ME}"
+echo "#### Starting perform_the_reboot ####"
+
+# TODO: Warn and exit if there are more than 5 nodes to reboot
 if [[ -s "${REBOOT_ME}" ]] ; then
   echo "Please reboot these:"
   cat "${REBOOT_ME}"
   for line in `cat "${REBOOT_ME}"`; do
     echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
-    # echo $host":"$TIMESTAMP":"$EPOCH_NOW >> ${REBOOT_LOG}
   done
 else
   echo "No machines to reboot."
@@ -292,7 +323,10 @@ fi ;
 }
 
 
-function quit {
+########################################
+# FIN
+########################################
+quit() {
   exit
 }
 
@@ -303,8 +337,11 @@ function quit {
 fresh_dirs
 find_all_hosts ssh
 find_all_hosts sshalt
-find_down_hosts
+find_down_hosts ssh
+find_down_hosts sshalt
+no_down_nodes
 find_reboot_candidates
+quit
 did_they_come_back
 has_it_been_24_hrs
-#perform_the_reboot
+perform_the_reboot
