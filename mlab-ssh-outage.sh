@@ -11,23 +11,7 @@
 # TODO: This script sets the nagios server as eb.measurementlab.net. This should
 # be changed to import a general definition of the nagios server from a config
 # file common to all maintenance scripts. (import mlabconfig ?)
-# TODO: Fix baseList bug.
-# On eb, this script runs as root because of some kind of bug. If run as a
-# regular user, baseList gives an error trying to read the nagios status file,
-# even though the file is readable.
-# TODO: For cron, this script would have to be run as root, or use Nagios
-# authentication because of the baseList.pl permissions, see above TODO.
-# TODO: This version generates a trustworthy list of host to reboot right now.
-# Next step is to log them and make sure that current host haven't been
-# rebooted in the last 24 hours, and that no more than 5 host total are in the
-# process of being rebooted.
-# TODO: What should we do with any hosts over the 5-host limit? Ignore and wait
-# for the next run? Put them at the top of the queue if they are still down
-# during the next run?
 # TODO: Add tests for null response, from baseList and anywhere else that it matters
-# TODO: Split the find_all_hosts function into two, one for sshalt and one for 
-# hosts. The baseList URL for hosts (including switches) will be different 
-# enough that just changing the plugin name won't work.
 
 TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
@@ -116,7 +100,6 @@ fi ;
 # and problem_acknowledged state 0 (not acknowledged).
 # If there are hosts in state "2 1 0",
 # create files DOWN_HOSTS_SSH and/or DOWN_HOSTS_SSHALT, and DOWN_SWITCHES_SSH
-# Find hosts in both the down ssh and sshalt lists
 # Inputs: ALL_HOSTS_SSH, ALL_HOSTS_SSHALT
 # Outputs: DOWN_HOSTS_SSH, DOWN_HOSTS_SSHALT, DOWN_SWITCHES_SSH
 ########################################
@@ -341,7 +324,7 @@ find_down_hosts ssh
 find_down_hosts sshalt
 no_down_nodes
 find_reboot_candidates
-quit
 did_they_come_back
 has_it_been_24_hrs
 perform_the_reboot
+quit
