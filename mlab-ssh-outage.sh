@@ -32,25 +32,25 @@ REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
 REBOOT_RUNNING_LOG="${REBOOT_HISTORY_DIR}/reboot_running_log"
 PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
-
+NOTIFICATION_EMAIL="${REBOT_LOG_DIR}/rebot_notify.out"
 ########################################
 # Function: fresh_dirs
 # Make a fresh SSH_OUTAGE_TEMP_DIR
 # Make a persistent REBOOT_HISTORY_DIR if it doesn't already exist
 ########################################
 fresh_dirs() {
-echo "#### Starting fresh_dirs(). Resetting the output dir. ####"
+  echo "#### Starting fresh_dirs(). Resetting the output dir. ####"
 
-rm -r "${SSH_OUTAGE_TEMP_DIR}"
-mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
-echo "This directory gets recreated with fresh status files every time \
-  rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
+  rm -r "${SSH_OUTAGE_TEMP_DIR}"
+  mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
+  echo "This directory gets recreated with fresh status files every time \
+    rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
 
-if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
-  mkdir "${REBOOT_HISTORY_DIR}"
-  echo "This is a persistent directory that holds historical reboot \
-    information." > "${REBOOT_HISTORY_DIR}/README"
-fi
+  if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
+    mkdir "${REBOOT_HISTORY_DIR}"
+    echo "This is a persistent directory that holds historical reboot \
+      information." > "${REBOOT_HISTORY_DIR}/README"
+  fi
 }
 
 ########################################
@@ -65,32 +65,32 @@ fi
 # Creates files $SSH_OUTAGE_TEMP_DIR/all_hosts_ssh and $SSH_OUTAGE_TEMP_DIR/all_hosts_sshalt
 ########################################
 find_all_hosts() {
-echo "#### Starting find_all_hosts(). Getting status of $1 from Nagios. ####"
+  echo "#### Starting find_all_hosts(). Getting status of $1 from Nagios. ####"
 
-# Configure a user's login to Nagios.  For more information on netrc files, see
-# the manpage for curl.  If a netrc file doesn't exist, then the user will be
-# prompted to enter credentials.
-if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
-  nagios_auth='--netrc'
-else
-  read -p "Nagios login: " nagios_login
-  read -s -p "Nagios password: " nagios_pass
-  nagios_auth="--user ${nagios_login}:${nagios_pass}"
-  echo -e '\n'
-fi
+  # Configure a user's login to Nagios.  For more information on netrc files, see
+  # the manpage for curl.  If a netrc file doesn't exist, then the user will be
+  # prompted to enter credentials.
+  if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
+    nagios_auth='--netrc'
+  else
+    read -p "Nagios login: " nagios_login
+    read -s -p "Nagios password: " nagios_pass
+    nagios_auth="--user ${nagios_login}:${nagios_pass}"
+    echo -e '\n'
+  fi
 
-curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" --digest --netrc \
-  "http://nagios.measurementlab.net/baseList?show_state=1&service_name="$1"&plugin_output=0&show_problem_acknowledged=1"
+  curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" --digest --netrc \
+    "http://nagios.measurementlab.net/baseList?show_state=1&service_name="$1"&plugin_output=0&show_problem_acknowledged=1"
 
-# TODO: Make this a unit test
-if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
-#  echo "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" exists
-  true
-else
-  echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's possible \
-    the connection to the Nagios server failed."
-  echo ""
-fi ;
+  # TODO: Make this a unit test
+  if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
+  #  echo "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" exists
+    true
+  else
+    echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's possible \
+      the connection to the Nagios server failed."
+    echo ""
+  fi ;
 }
 
 ########################################
@@ -104,30 +104,30 @@ fi ;
 # Outputs: DOWN_HOSTS_SSH, DOWN_HOSTS_SSHALT, DOWN_SWITCHES_SSH
 ########################################
 find_down_hosts() {
-echo "#### Starting find_down_hosts(), hosts in hard state 1 for $1 ####"
+  echo "#### Starting find_down_hosts(), hosts in hard state 1 for $1 ####"
 
-# Make the down_hosts file creation idempotent to avoid unintentional appends
-if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}" ]; then
-  rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
-fi
-
-if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}" ]; then
-  rm "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
-fi
-
-while read line; do
-  host="$(echo $line | awk '{print $1 }')"
-  state="$(echo $line | awk '{ print $2 }')"
-  hard="$(echo $line | awk '{ print $3 }')"
-  problem_acknowledged="$(echo $line | awk '{ print $4 }')"
-  if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
-    [[ "$problem_acknowledged" == 0 ]]; then
-    echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
-      >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
-    echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
-      >> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
+  # Make the down_hosts file creation idempotent to avoid unintentional appends
+  if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}" ]; then
+    rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
   fi
-done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${1}"
+
+  if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}" ]; then
+    rm "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
+  fi
+
+  while read line; do
+    host="$(echo $line | awk '{print $1 }')"
+    state="$(echo $line | awk '{ print $2 }')"
+    hard="$(echo $line | awk '{ print $3 }')"
+    problem_acknowledged="$(echo $line | awk '{ print $4 }')"
+    if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
+      [[ "$problem_acknowledged" == 0 ]]; then
+      echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
+	>> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
+      echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
+	>> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
+    fi
+  done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${1}"
 
 }
 
@@ -138,14 +138,14 @@ done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${1}"
 # Inputs: DOWN_NODES_SSH, DOWN_NODES_SSHALT
 ########################################
 no_down_nodes() {
-echo "#### Starting no_down_nodes() ####"
+  echo "#### Starting no_down_nodes() ####"
 
-if [[ -s "${DOWN_NODES_SSH}" ]] && [[ -s "${DOWN_NODES_SSHALT}" ]]; then
-  # echo "There are down hosts to check; continuing"
-  true
-else echo "Blue skies: There are no down hosts; exiting"
-  exit
-fi
+  if [[ -s "${DOWN_NODES_SSH}" ]] && [[ -s "${DOWN_NODES_SSHALT}" ]]; then
+    # TODO: unit test: echo "There are down hosts to check; continuing"
+    true
+  else echo "Blue skies: There are no down hosts; exiting"
+    exit
+  fi
 
 }
 
@@ -157,37 +157,37 @@ fi
 # Output: REBOOT_CANDIDATES
 ########################################
 find_reboot_candidates() {
-echo "#### Starting find_reboot_candidates() ####"
+  echo "#### Starting find_reboot_candidates() ####"
 
-# If a node's ssh and sshalt are both down, it goes on the "maybe" list
-comm -12 <( sort "${DOWN_NODES_SSH}") <( sort "${DOWN_NODES_SSHALT}" ) > \
-  "${REBOOT_CANDIDATES}"
+  # If a node's ssh and sshalt statuses are both down, it's a candidate for reboot
+  comm -12 <( sort "${DOWN_NODES_SSH}") <( sort "${DOWN_NODES_SSHALT}" ) > \
+    "${REBOOT_CANDIDATES}"
 
-# TODO: Make this a unit test
-# echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
-# cat "${REBOOT_CANDIDATES}"
-# echo ""
+  # TODO: unit test to make sure $REBOOT_CANDIDATES exists
+  # echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
+  # cat "${REBOOT_CANDIDATES}"
+  # echo ""
 
-# TODO: email interested parties. "Interested parties" seems like a candidate
-# for an M-Lab env var/M-Lab module.
-echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
-if [[ -s "${DOWN_SWITCHES}" ]] ; then
-  echo "Down switches! This shouldn't happen; please investigate and ask site
-    partners to reboot the switch if needed."
-  cat "${DOWN_SWITCHES}"
-  echo ""
-  for switch in `cat "${DOWN_SWITCHES}" | awk -F. '{ print $2 }'`; do
-    grep -v $switch "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-    mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
-  done
-fi ;
+  # TODO: email interested parties. "Interested parties" seems like a candidate
+  # for an M-Lab env var/M-Lab module.
+  echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
+  if [[ -s "${DOWN_SWITCHES}" ]] ; then
+    echo "Down switches! This shouldn't happen; please investigate and ask site
+      partners to reboot the switch if needed." >> ${NOTIFICATION_EMAIL} 
+    cat "${DOWN_SWITCHES}"
+    echo ""
+    for switch in `cat "${DOWN_SWITCHES}" | awk -F. '{ print $2 }'`; do
+      grep -v $switch "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+      mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+    done
+  fi ;
 
-echo "Switch-free Contents of REBOOT_CANDIDATES:"
-if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
-  cat "${REBOOT_CANDIDATES}"
-  echo ""
-else echo "Blue skies: There are no new reboot candidates."
-fi ;
+  echo "Switch-free Contents of REBOOT_CANDIDATES:"
+  if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
+    cat "${REBOOT_CANDIDATES}"
+    echo ""
+  else echo "Blue skies: There are no new reboot candidates."
+  fi ;
 }
 
 ########################################
@@ -204,38 +204,38 @@ fi ;
 # Output PROBLEMATIC 
 ########################################
 did_they_come_back() {
-echo "#### Starting did_they_come_back() ####"
+  echo "#### Starting did_they_come_back() ####"
 
-#echo "Contents of REBOOT_ATTEMPTED:"
-#cat ${REBOOT_ATTEMPTED}
-#echo ""
-#echo "Contents of REBOOT_CANDIDATES:"
-#cat ${REBOOT_CANDIDATES}
-#echo ""
-for line in `cat "${REBOOT_ATTEMPTED}"`; do
-  echo "Line is:" $line
-  for host in `echo $line | awk -F: '{ print $1 }'`; do
-    echo "Host is:" $host
-    if grep -q $host "${REBOOT_CANDIDATES}" ; then
-      cp "${REBOOT_CANDIDATES}" "${REBOOT_CANDIDATES}".$TIMESTAMP
-      echo "$host attempted to boot during the last run but is still down.
-        Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
-      echo $host" still not up but requested during last run:" $line >> $PROBLEMATIC
-      grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-      mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
-    else
-      echo "Logging $host in REBOOT_RUNNING_LOG and scrubbing from
-        REBOOT_ATTEMPTED because its reboot succeeded."
-      cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
-      grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
-      mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
-      echo $line >> "${REBOOT_RUNNING_LOG}"
-    fi
+  #echo "Contents of REBOOT_ATTEMPTED:"
+  #cat ${REBOOT_ATTEMPTED}
+  #echo ""
+  #echo "Contents of REBOOT_CANDIDATES:"
+  #cat ${REBOOT_CANDIDATES}
+  #echo ""
+  for line in `cat "${REBOOT_ATTEMPTED}"`; do
+    echo "Line is:" $line
+    for host in `echo $line | awk -F: '{ print $1 }'`; do
+      echo "Host is:" $host
+      if grep -q $host "${REBOOT_CANDIDATES}" ; then
+	cp "${REBOOT_CANDIDATES}" "${REBOOT_CANDIDATES}".$TIMESTAMP
+	echo "$host attempted to boot during the last run but is still down.
+	  Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
+	echo $host" still not up but requested during last run:" $line >> $PROBLEMATIC
+	grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+	mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+      else
+	echo "Logging $host in REBOOT_RUNNING_LOG and scrubbing from
+	  REBOOT_ATTEMPTED because its reboot succeeded."
+	cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
+	grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
+	mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
+	echo $line >> "${REBOOT_RUNNING_LOG}"
+      fi
+    done
   done
-done
-#echo "New Contents of REBOOT_ATTEMPTED (/tmp/rebot-testing/reboot_history/reboot_attempted):"
-#cat ${REBOOT_ATTEMPTED}
-#echo ""
+  #echo "New Contents of REBOOT_ATTEMPTED (/tmp/rebot-testing/reboot_history/reboot_attempted):"
+  #cat ${REBOOT_ATTEMPTED}
+  #echo ""
 }
 
 ########################################
@@ -249,38 +249,38 @@ done
 # Output: REBOOT_CANDIDATES
 ########################################
 has_it_been_24_hrs() {
-echo "#### Starting has_it_been_24_hrs ####" 
+  echo "#### Starting has_it_been_24_hrs ####" 
 
-#echo "Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
-#cat ${REBOOT_CANDIDATES}
-#echo "Contents of REBOOT_RUNNING_LOG (/tmp/rebot-testing/reboot_history/reboot_running_log:"
-#cat ${REBOOT_RUNNING_LOG}
-echo ""
-for host in `cat "${REBOOT_CANDIDATES}"`; do
-  if grep -q $host "${REBOOT_RUNNING_LOG}" ; then
-    # echo "$host found in REBOOT_RUNNING_LOG. Grabbing previous reboot timestamp."
-    PREVIOUS_REBOOT=`grep $host $REBOOT_RUNNING_LOG |awk -F: '{print $3 }'`
-    # echo "Previous reboot:" $PREVIOUS_REBOOT
-    SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
-    echo "Seconds since "$host"'s previous reboot (should be more than 86400):" $SECONDS_SINCE_REBOOT
-    # echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
-    if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
-      echo "More than a day since $host was rebooted. Ok to reboot."
+  #echo "Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
+  #cat ${REBOOT_CANDIDATES}
+  #echo "Contents of REBOOT_RUNNING_LOG (/tmp/rebot-testing/reboot_history/reboot_running_log:"
+  #cat ${REBOOT_RUNNING_LOG}
+  echo ""
+  for host in `cat "${REBOOT_CANDIDATES}"`; do
+    if grep -q $host "${REBOOT_RUNNING_LOG}" ; then
+      # echo "$host found in REBOOT_RUNNING_LOG. Grabbing previous reboot timestamp."
+      PREVIOUS_REBOOT=`grep $host $REBOOT_RUNNING_LOG |awk -F: '{print $3 }'`
+      # echo "Previous reboot:" $PREVIOUS_REBOOT
+      SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
+      echo "Seconds since "$host"'s previous reboot (should be more than 86400):" $SECONDS_SINCE_REBOOT
+      # echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
+      if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
+	echo "More than a day since $host was rebooted. Ok to reboot."
+      else
+	echo "Less than a day since $host was rebooted. Not ok to reboot."
+	grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+	mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+      fi
     else
-      echo "Less than a day since $host was rebooted. Not ok to reboot."
-      grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-      mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+      echo "$host is not present in the REBOOT_RUNNING_LOG. Ok to proceed."
     fi
-  else
-    echo "$host is not present in the REBOOT_RUNNING_LOG. Ok to proceed."
-  fi
-done
+  done
 
-echo "New Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
-for line in `cat "${REBOOT_CANDIDATES}"`; do
-  echo $line":"$TIMESTAMP":"$EPOCH_NOW
-done
-echo ""
+  echo "New Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
+  for line in `cat "${REBOOT_CANDIDATES}"`; do
+    echo $line":"$TIMESTAMP":"$EPOCH_NOW
+  done
+  echo ""
 }
 
 ########################################
@@ -291,20 +291,26 @@ echo ""
 # Takes REBOOT_ME as input, write to REBOOT_ATTEMPTED
 ########################################
 perform_the_reboot() {
-echo "#### Starting perform_the_reboot ####"
+  echo "#### Starting perform_the_reboot ####"
 
-# TODO: Warn and exit if there are more than 5 nodes to reboot
-if [[ -s "${REBOOT_ME}" ]] ; then
-  echo "Please reboot these:"
-  cat "${REBOOT_ME}"
-  for line in `cat "${REBOOT_ME}"`; do
-    echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
-  done
-else
-  echo "No machines to reboot."
-fi ;
+  # TODO: Warn and exit if there are more than 5 nodes to reboot
+  if [[ -s "${REBOOT_ME}" ]] ; then
+    echo "Please reboot these:"
+    cat "${REBOOT_ME}"
+    for line in `cat "${REBOOT_ME}"`; do
+      echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
+    done
+  else
+    echo "No machines to reboot."
+  fi ;
 }
 
+########################################
+# Notify 
+########################################
+notify() {
+  mail -s "Notification from ReBot" salarcon@opentechinstitute.org < ${NOTIFICATION_EMAIL}
+}
 
 ########################################
 # FIN
@@ -324,7 +330,8 @@ find_down_hosts ssh
 find_down_hosts sshalt
 no_down_nodes
 find_reboot_candidates
+quit
 did_they_come_back
 has_it_been_24_hrs
 perform_the_reboot
-quit
+notify
