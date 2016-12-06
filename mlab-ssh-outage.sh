@@ -17,7 +17,7 @@ TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
 EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
 #REBOT_LOG_DIR="/tmp/rebot"
-REBOT_LOG_DIR="/tmp/rebot-testing"
+REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
 ALL_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
@@ -28,11 +28,10 @@ DOWN_SWITCHES="${SSH_OUTAGE_TEMP_DIR}/down_switches_ssh"
 REBOOT_CANDIDATES="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates"
 REBOOT_CANDIDATES_1="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates.1"
 REBOOT_ME="${SSH_OUTAGE_TEMP_DIR}/reboot_me"
+NOTIFICATION_EMAIL="${SSH_OUTAGE_TEMP_DIR}/rebot_notify.out"
 REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
-REBOOT_RUNNING_LOG="${REBOOT_HISTORY_DIR}/reboot_running_log"
 PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
-NOTIFICATION_EMAIL="${REBOT_LOG_DIR}/rebot_notify.out"
 ########################################
 # Function: fresh_dirs
 # Make a fresh SSH_OUTAGE_TEMP_DIR
@@ -170,11 +169,11 @@ find_reboot_candidates() {
 
   # TODO: email interested parties. "Interested parties" seems like a candidate
   # for an M-Lab env var/M-Lab module.
-  echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
+  #echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
   if [[ -s "${DOWN_SWITCHES}" ]] ; then
     echo "Down switches! This shouldn't happen; please investigate and ask site
-      partners to reboot the switch if needed." >> ${NOTIFICATION_EMAIL} 
-    cat "${DOWN_SWITCHES}"
+      partners to reboot the switch if needed." > ${NOTIFICATION_EMAIL}
+    #cat ${NOTIFICATION_EMAIL}
     echo ""
     for switch in `cat "${DOWN_SWITCHES}" | awk -F. '{ print $2 }'`; do
       grep -v $switch "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
@@ -202,18 +201,24 @@ find_reboot_candidates() {
 # Outdated attempts should be moved to problematic or something.
 # Input/Output: Reads and scrubs from REBOOT_ATTEMPTED and REBOOT_CANDIDATES
 # Output PROBLEMATIC 
+# TODO: Reboot_log spreadsheet ID will be 1SnGHGy_ccvr4R5-_Pzn5bHr5Y986F9AT_v_GeFbgXto
+# https://docs.google.com/spreadsheets/d/1SnGHGy_ccvr4R5-_Pzn5bHr5Y986F9AT_v_GeFbgXto/edit#gid=0
+# example in mlabops/node-update/check_pipeline.py
+# https://developers.google.com/sheets/guides/values
+# https://developers.google.com/sheets/reference/rest/v4/spreadsheets.values
 ########################################
 did_they_come_back() {
   echo "#### Starting did_they_come_back() ####"
 
-  #echo "Contents of REBOOT_ATTEMPTED:"
-  #cat ${REBOOT_ATTEMPTED}
-  #echo ""
-  #echo "Contents of REBOOT_CANDIDATES:"
-  #cat ${REBOOT_CANDIDATES}
-  #echo ""
+  echo "Contents of REBOOT_ATTEMPTED:"
+  cat ${REBOOT_ATTEMPTED}
+  echo ""
+  echo "Contents of REBOOT_CANDIDATES:"
+  cat ${REBOOT_CANDIDATES}
+  echo ""
   for line in `cat "${REBOOT_ATTEMPTED}"`; do
     echo "Line is:" $line
+    # I do this transformation between hostname and hostname-with-timestamp all the time. Can it be shortened?
     for host in `echo $line | awk -F: '{ print $1 }'`; do
       echo "Host is:" $host
       if grep -q $host "${REBOOT_CANDIDATES}" ; then
@@ -223,13 +228,28 @@ did_they_come_back() {
 	echo $host" still not up but requested during last run:" $line >> $PROBLEMATIC
 	grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
 	mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+# Peter's suggestion:
+      #echo "$host attempted to boot during the last run but is still down. "\
+      #     "Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
+      #echo $host" still not up but requested during last run:" $line >> $PROBLEMATIC
+
       else
-	echo "Logging $host in REBOOT_RUNNING_LOG and scrubbing from
+	echo "Logging $host in REBOOT_LOG and scrubbing from
 	  REBOOT_ATTEMPTED because its reboot succeeded."
 	cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
 	grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
 	mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
-	echo $line >> "${REBOOT_RUNNING_LOG}"
+	echo $line >> "${REBOOT_LOG}"
+# Peter's suggestion:
+       #    echo $host > ${REBOOT_CANDIDATES}.tmp
+       #    echo "Logging $host in REBOOT_LOG and scrubbing from "\
+       #     "REBOOT_ATTEMPTED because its reboot succeeded."
+       #      cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
+       #	grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
+       # mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
+       # echo $line >> "${REBOOT_LOG}"
+
+
       fi
     done
   done
@@ -240,47 +260,50 @@ did_they_come_back() {
 
 ########################################
 # Function: has_it_been_24_hrs() 
-# Need a check to make sure the reboot_candidates weren't rebooted in
-# the last 24 hours
-# Next, take current epoch time, epoch time of previous entry for
+# Make sure the reboot_candidates weren't rebooted in the last 24 hours
+# Take current epoch time, epoch time of previous entry for
 # this server, subtract previous from current, make sure it's more than 86400s
 # or 24 hours. SECONDS_IN_A_DAY=$(($EPOCH_NOW - $EPOCH_YESTERDAY))
 # Input: REBOOT_CANDIDATES
 # Output: REBOOT_CANDIDATES
 ########################################
 has_it_been_24_hrs() {
-  echo "#### Starting has_it_been_24_hrs ####" 
+  echo "#### Starting has_it_been_24_hrs ####"
 
-  #echo "Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
-  #cat ${REBOOT_CANDIDATES}
-  #echo "Contents of REBOOT_RUNNING_LOG (/tmp/rebot-testing/reboot_history/reboot_running_log:"
-  #cat ${REBOOT_RUNNING_LOG}
+  echo "Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
+  cat ${REBOOT_CANDIDATES}
+  echo "Contents of REBOOT_LOG (/tmp/rebot-testing/reboot_history/reboot_log:"
+  cat ${REBOOT_LOG}
+  #echo "# Starting timestamp comparison #"
   echo ""
   for host in `cat "${REBOOT_CANDIDATES}"`; do
-    if grep -q $host "${REBOOT_RUNNING_LOG}" ; then
-      # echo "$host found in REBOOT_RUNNING_LOG. Grabbing previous reboot timestamp."
-      PREVIOUS_REBOOT=`grep $host $REBOOT_RUNNING_LOG |awk -F: '{print $3 }'`
-      # echo "Previous reboot:" $PREVIOUS_REBOOT
+    if grep -q $host "${REBOOT_LOG}" ; then
+      echo ""
+      #echo "$host found in REBOOT_LOG. Checking its timestamp to see if it's been more than 24 hours."
+      PREVIOUS_REBOOT=`grep $host $REBOOT_LOG | head -1 | awk -F: '{print $3 }'`
+      #echo "Previous reboot:" $PREVIOUS_REBOOT
       SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
-      echo "Seconds since "$host"'s previous reboot (should be more than 86400):" $SECONDS_SINCE_REBOOT
-      # echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
+      #echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
       if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
-	echo "More than a day since $host was rebooted. Ok to reboot."
+        true
+        # echo "More than a day since $host was rebooted. Ok to reboot."
       else
-	echo "Less than a day since $host was rebooted. Not ok to reboot."
-	grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-	mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+        # echo "Less than a day since $host was rebooted. Not ok to reboot."
+        echo "Less than a day since $host was rebooted (${SECONDS_SINCE_REBOOT}" \
+          "seconds. Should be more than 86400.) Not ok to reboot." > ${NOTIFICATION_EMAIL}
+        grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+        mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
       fi
     else
-      echo "$host is not present in the REBOOT_RUNNING_LOG. Ok to proceed."
+      true
+      # echo "$host is not present in the REBOOT_LOG. Ok to proceed."
     fi
   done
 
-  echo "New Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
-  for line in `cat "${REBOOT_CANDIDATES}"`; do
-    echo $line":"$TIMESTAMP":"$EPOCH_NOW
-  done
-  echo ""
+#  echo ""
+#  echo "New Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
+#  cat ${REBOOT_CANDIDATES}
+#  echo ""
 }
 
 ########################################
@@ -292,16 +315,21 @@ has_it_been_24_hrs() {
 ########################################
 perform_the_reboot() {
   echo "#### Starting perform_the_reboot ####"
-
-  # TODO: Warn and exit if there are more than 5 nodes to reboot
   if [[ -s "${REBOOT_ME}" ]] ; then
-    echo "Please reboot these:"
-    cat "${REBOOT_ME}"
-    for line in `cat "${REBOOT_ME}"`; do
-      echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
-    done
+    if [[ `cat "${REBOOT_ME}" | wc -l` -gt 5 ]] ; then
+      echo "There are more than 5 hosts queued for reboot. This is unusual" \
+        "and could be dangerous! Please check the fleet for problems. " \
+        "Exiting." >> ${NOTIFICATION_EMAIL}
+    else
+      # TODO: call drac.py to do this automatically
+      echo "Please reboot these:"
+      cat "${REBOOT_ME}"
+      for line in `cat "${REBOOT_ME}"`; do
+        echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
+      done
+    fi
   else
-    echo "No machines to reboot."
+   echo "No machines to reboot."
   fi ;
 }
 
@@ -323,15 +351,16 @@ quit() {
 ########################################
 # Run the functions
 ########################################
-fresh_dirs
-find_all_hosts ssh
-find_all_hosts sshalt
-find_down_hosts ssh
-find_down_hosts sshalt
-no_down_nodes
-find_reboot_candidates
-quit
+#fresh_dirs
+#find_all_hosts ssh
+#find_all_hosts sshalt
+
+#find_down_hosts ssh
+#find_down_hosts sshalt
+#no_down_nodes
+#find_reboot_candidates
 did_they_come_back
-has_it_been_24_hrs
-perform_the_reboot
-notify
+#has_it_been_24_hrs
+#perform_the_reboot
+quit
+aotify
