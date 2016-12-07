@@ -195,19 +195,48 @@ find_reboot_candidates() {
 # of reboot candidates and into a still_down file.
 # If all hosts from the previous attempt are clean, scrub it from the
 # reboot_attempted file, because it succeeded.
-# TODO: Maybe this should check the timestamp to make sure the previous attempt
-# isn't stale (more than 15 min or 900 sec long)
-# TODO: Make sure REBOOT_ATTEMPTED doesn't accidentally collect old runs.
-# Outdated attempts should be moved to problematic or something.
-# Input/Output: Reads and scrubs from REBOOT_ATTEMPTED and REBOOT_CANDIDATES
+# Input: Reads from REBOOT_ATTEMPTED and REBOOT_CANDIDATES
 # Output PROBLEMATIC 
 # TODO: Reboot_log spreadsheet ID will be 1SnGHGy_ccvr4R5-_Pzn5bHr5Y986F9AT_v_GeFbgXto
 # https://docs.google.com/spreadsheets/d/1SnGHGy_ccvr4R5-_Pzn5bHr5Y986F9AT_v_GeFbgXto/edit#gid=0
 # example in mlabops/node-update/check_pipeline.py
 # https://developers.google.com/sheets/guides/values
 # https://developers.google.com/sheets/reference/rest/v4/spreadsheets.values
+# TODO: (python rewrite) Test whether contents of PROBLEMATIC and REBOOT_LOG end up correct.
 ########################################
 did_they_come_back() {
+  echo "#### Starting did_they_come_back() ####"
+
+#  echo "Contents of REBOOT_ATTEMPTED:"
+#  cat ${REBOOT_ATTEMPTED}
+#  echo ""
+#  echo "Contents of REBOOT_CANDIDATES:"
+#  cat ${REBOOT_CANDIDATES}
+#  echo ""
+#  echo "Contents of REBOOT_LOG:"
+#  cat ${REBOOT_LOG}
+#  echo ""
+
+  for line in `cat "${REBOOT_ATTEMPTED}"`; do
+    attempted_host=`echo $line | awk -F: '{ print $1 }'`
+    if grep -q "${attempted_host}" "${REBOOT_CANDIDATES}" ; then
+      # echo "Logging "${attempted_host}" in PROBLEMATIC for failed reboot."
+      echo "${attempted_host} still not up but requested during last run:" \
+        $line |tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
+    else
+      # echo "Logging $attempted_host in REBOOT_LOG because its reboot succeeded."
+      echo $line >> "${REBOOT_LOG}"
+    fi
+  done
+
+
+#  echo "New Contents of REBOOT_LOG:"
+#  cat ${REBOOT_LOG}
+#  echo ""
+}
+
+##########################
+did_they_omg_comments() {
   echo "#### Starting did_they_come_back() ####"
 
   echo "Contents of REBOOT_ATTEMPTED:"
@@ -216,42 +245,32 @@ did_they_come_back() {
   echo "Contents of REBOOT_CANDIDATES:"
   cat ${REBOOT_CANDIDATES}
   echo ""
+
+  # rm -f "${REBOOT_ATTEMPTED}".tmp && touch "${REBOOT_ATTEMPTED}".tmp
   for line in `cat "${REBOOT_ATTEMPTED}"`; do
     echo "Line is:" $line
-    # I do this transformation between hostname and hostname-with-timestamp all the time. Can it be shortened?
-    for host in `echo $line | awk -F: '{ print $1 }'`; do
-      echo "Host is:" $host
-      if grep -q $host "${REBOOT_CANDIDATES}" ; then
-	cp "${REBOOT_CANDIDATES}" "${REBOOT_CANDIDATES}".$TIMESTAMP
-	echo "$host attempted to boot during the last run but is still down.
-	  Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
-	echo $host" still not up but requested during last run:" $line >> $PROBLEMATIC
-	grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-	mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
-# Peter's suggestion:
-      #echo "$host attempted to boot during the last run but is still down. "\
-      #     "Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
-      #echo $host" still not up but requested during last run:" $line >> $PROBLEMATIC
+    # for host in `cat "${REBOOT_ATTEMPTED}" | awk -F: '{ print $1 }'`; do
+    for attempted_host in `echo $line | awk -F: '{ print $1 }'`; do
+      echo "Host is:" $attempted_host
+      if grep -q $attempted_host "${REBOOT_CANDIDATES}" ; then
+      #if grep -q `echo $line | awk -F: '{ print $1 }'` "${REBOOT_CANDIDATES}" ; then
+	# cp "${REBOOT_CANDIDATES}" "${REBOOT_CANDIDATES}".$TIMESTAMP
+	# echo "$attempted_host attempted to boot during the last run but is still down.
+	#  Storing in Problematic and scrubbing from REBOOT_CANDIDATES."
+	echo $attempted_host" still not up but requested during last run:" $line |tee $PROBLEMATIC >>"${NOTIFICATION_EMAIL}"
+	#grep -v $attempted_host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
+	#mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
 
       else
-	echo "Logging $host in REBOOT_LOG and scrubbing from
+	echo "Logging $attempted_host in REBOOT_LOG and scrubbing from
 	  REBOOT_ATTEMPTED because its reboot succeeded."
-	cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
-	grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
-	mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
 	echo $line >> "${REBOOT_LOG}"
-# Peter's suggestion:
-       #    echo $host > ${REBOOT_CANDIDATES}.tmp
-       #    echo "Logging $host in REBOOT_LOG and scrubbing from "\
-       #     "REBOOT_ATTEMPTED because its reboot succeeded."
-       #      cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
-       #	grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
-       # mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
-       # echo $line >> "${REBOOT_LOG}"
+	#cp "${REBOOT_ATTEMPTED}" "${REBOOT_ATTEMPTED}".$TIMESTAMP
+	#grep -v $host "${REBOOT_ATTEMPTED}" > "${REBOOT_ATTEMPTED}".tmp
+	#mv  "${REBOOT_ATTEMPTED}".tmp "${REBOOT_ATTEMPTED}"
 
-
-      fi
-    done
+	fi
+      done
   done
   #echo "New Contents of REBOOT_ATTEMPTED (/tmp/rebot-testing/reboot_history/reboot_attempted):"
   #cat ${REBOOT_ATTEMPTED}
@@ -270,35 +289,37 @@ did_they_come_back() {
 has_it_been_24_hrs() {
   echo "#### Starting has_it_been_24_hrs ####"
 
-  echo "Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
+  #echo "Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
   cat ${REBOOT_CANDIDATES}
-  echo "Contents of REBOOT_LOG (/tmp/rebot-testing/reboot_history/reboot_log:"
+  #echo "Contents of REBOOT_LOG (/tmp/rebot-testing/reboot_history/reboot_log:"
   cat ${REBOOT_LOG}
   #echo "# Starting timestamp comparison #"
-  echo ""
+  #echo ""
+
+  rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
   for host in `cat "${REBOOT_CANDIDATES}"`; do
     if grep -q $host "${REBOOT_LOG}" ; then
-      echo ""
-      #echo "$host found in REBOOT_LOG. Checking its timestamp to see if it's been more than 24 hours."
+      # echo ""
+      # echo "$host found in REBOOT_LOG. Checking its timestamp to see if it's been more than 24 hours."
       PREVIOUS_REBOOT=`grep $host $REBOOT_LOG | head -1 | awk -F: '{print $3 }'`
-      #echo "Previous reboot:" $PREVIOUS_REBOOT
+      # echo "Previous reboot:" $PREVIOUS_REBOOT
       SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
-      #echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
+      # echo "$host previous reboot:" $PREVIOUS_REBOOT". Seconds since: "$SECONDS_SINCE_REBOOT". Should be more than 86400."
       if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
-        true
-        # echo "More than a day since $host was rebooted. Ok to reboot."
+        # echo "More than a day since $host was rebooted. Ok to reboot. Echoing into REBOOT_CANDIDATES"
+        echo $host >> "${REBOOT_CANDIDATES}.tmp"
       else
         # echo "Less than a day since $host was rebooted. Not ok to reboot."
         echo "Less than a day since $host was rebooted (${SECONDS_SINCE_REBOOT}" \
-          "seconds. Should be more than 86400.) Not ok to reboot." > ${NOTIFICATION_EMAIL}
-        grep -v $host "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-        mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+          "seconds. Should be more than 86400.) Not ok to reboot." >> ${NOTIFICATION_EMAIL}
       fi
     else
-      true
-      # echo "$host is not present in the REBOOT_LOG. Ok to proceed."
+      #echo "$host is not present in the REBOOT_LOG. Ok to proceed."
+      echo $host >> "${REBOOT_CANDIDATES}.tmp"
     fi
   done
+
+mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
 
 #  echo ""
 #  echo "New Contents of REBOOT_CANDIDATES (/tmp/rebot-testing/ssh_outage/reboot_candidates:"
@@ -315,6 +336,8 @@ has_it_been_24_hrs() {
 ########################################
 perform_the_reboot() {
   echo "#### Starting perform_the_reboot ####"
+  # make a fresh copy of ${REBOOT_ATTEMPTED}. Any relevant entries from the previous run are processed into REBOOT_LOG or $PROBLEMATIC in the did_they_come_back() function.
+  rm -f "${REBOOT_ATTEMPTED}" && touch "${REBOOT_ATTEMPTED}"
   if [[ -s "${REBOOT_ME}" ]] ; then
     if [[ `cat "${REBOOT_ME}" | wc -l` -gt 5 ]] ; then
       echo "There are more than 5 hosts queued for reboot. This is unusual" \
@@ -351,6 +374,9 @@ quit() {
 ########################################
 # Run the functions
 ########################################
+# make a --test flag
+# set up some known inputs
+
 #fresh_dirs
 #find_all_hosts ssh
 #find_all_hosts sshalt
@@ -363,4 +389,4 @@ did_they_come_back
 #has_it_been_24_hrs
 #perform_the_reboot
 quit
-aotify
+notify
