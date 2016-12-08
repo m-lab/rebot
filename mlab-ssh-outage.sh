@@ -65,7 +65,9 @@ fresh_dirs() {
 find_all_hosts() {
   echo "#### Starting find_all_hosts(). Getting status of $1 from Nagios. ####"
 
-  # Configure a user's login to Nagios.  For more information on netrc files, see
+  local service_name=$1
+  local output_file=$2
+# Configure a user's login to Nagios.  For more information on netrc files, see
   # the manpage for curl.  If a netrc file doesn't exist, then the user will be
   # prompted to enter credentials.
   if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
@@ -77,14 +79,18 @@ find_all_hosts() {
     echo -e '\n'
   fi
 
-  curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" --digest --netrc \
+  # curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" --digest --netrc \
+  curl -s "${nagios_auth}" -o $output_file --digest --netrc \
     "http://nagios.measurementlab.net/baseList?show_state=1&service_name="$1"&plugin_output=0&show_problem_acknowledged=1"
 
   # TODO: Make this a unit test
-  if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
+  # if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
+  #if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
+  if [[ -s $output_file ]] ; then
     true
   else
-    echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's " \
+    # echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's " \
+    echo "No output of $service_name $output_file. That shouldn't happen. It's " \
       "possible the connection to the Nagios server failed."
     echo ""
   fi ;
@@ -102,10 +108,13 @@ find_all_hosts() {
 ########################################
 find_down_hosts() {
   echo "#### Starting find_down_hosts(), hosts in hard state 1 for $1 ####"
-
+  local service_name=$1
+  local output_file=$2
   # Make the down_hosts file creation idempotent to avoid unintentional appends
-  if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}" ]; then
-    rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
+  # if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}" ]; then
+    # rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
+  if [ -f $output_file ]; then
+    rm "$output_file" && touch "$output_file"
   fi
 
   if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}" ]; then
@@ -120,7 +129,8 @@ find_down_hosts() {
     if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
       [[ "$problem_acknowledged" == 0 ]]; then
       echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
-	>> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
+	>> $output_file
+	# >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
       echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
 	>> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
     fi
@@ -143,7 +153,6 @@ no_down_nodes() {
   else echo "Blue skies: There are no down hosts; exiting"
    exit 0
   fi
-
 }
 
 ########################################
@@ -308,10 +317,10 @@ quit() {
 # TODO: make a --test flag and create some known inputs
 
 fresh_dirs
-find_all_hosts ssh
-find_all_hosts sshalt
-find_down_hosts ssh
-find_down_hosts sshalt
+find_all_hosts ssh "${ALL_HOSTS_SSH}"
+find_all_hosts sshalt "${ALL_HOSTS_SSHALT}"
+find_down_hosts ssh "${DOWN_NODES_SSH}"
+find_down_hosts sshalt "${DOWN_NODES_SSHALT}"
 no_down_nodes
 find_reboot_candidates
 did_they_come_back
