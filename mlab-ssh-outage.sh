@@ -39,13 +39,13 @@ PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
 fresh_dirs() {
   echo "#### Starting fresh_dirs(). Resetting the output dir. ####"
 
-  rm -r "${SSH_OUTAGE_TEMP_DIR}"
+  rm -r "${SSH_OUTAGE_TEMP_DIR}" > /dev/null 2>&1
   mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
   echo "This directory gets recreated with fresh status files every time \
     rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
 
   if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
-    mkdir "${REBOOT_HISTORY_DIR}"
+    mkdir -p "${REBOOT_HISTORY_DIR}"
     echo "This is a persistent directory that holds historical reboot \
       information." > "${REBOOT_HISTORY_DIR}/README"
   fi
@@ -82,11 +82,10 @@ find_all_hosts() {
 
   # TODO: Make this a unit test
   if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
-  #  echo "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" exists
     true
   else
-    echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's possible \
-      the connection to the Nagios server failed."
+    echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's " \
+      "possible the connection to the Nagios server failed."
     echo ""
   fi ;
 }
@@ -142,7 +141,7 @@ no_down_nodes() {
     # TODO: unit test: echo "There are down hosts to check; continuing"
     true
   else echo "Blue skies: There are no down hosts; exiting"
-    exit
+   exit 0
   fi
 
 }
@@ -164,22 +163,12 @@ find_reboot_candidates() {
   # TODO: unit test to make sure $REBOOT_CANDIDATES exists
   # echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
   # cat "${REBOOT_CANDIDATES}"
-  # echo ""
-
-  # TODO: email interested parties. "Interested parties" seems like a candidate
-  # for an M-Lab env var/M-Lab module.
-  #echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
-
-# This way is written so that if a host attached to a down switch is found in 
-# ${REBOOT_CANDIDATES}, it is removed.
-# Instead, look through ${REBOOT_CANDIDATES}, writing out any host that is NOT
-# found in ${DOWN_SWITCHES}, then writing the found lines to problematic?
 
   rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
   for line in `cat "${REBOOT_CANDIDATES}"`; do
-    switch=`echo $line | awk -F: '{ print $2 }'`
+    switch=`echo $line | awk -F. '{ print $2 }'`
     if grep -q $switch ${DOWN_SWITCHES} ; then
-      echo "$line belongs to a switch that's down. Don't reboot." |tee -a \
+      echo "The switch at $switch is down. Please fix it." |tee -a \
         ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
     else
       echo $host >>  ${REBOOT_CANDIDATES}.tmp
@@ -187,57 +176,47 @@ find_reboot_candidates() {
   done
 
   mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
-  echo "Switch-free Contents of REBOOT_CANDIDATES:"
+
   if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
+    echo "Switch-free Contents of REBOOT_CANDIDATES:"
     cat "${REBOOT_CANDIDATES}"
     echo ""
-  else echo "Blue skies: There are no new reboot candidates."
+  else
+    # Don't exit if there are no new candidates. Need to notify about down switches.
+    echo "Blue skies: There are no new reboot candidates."
+    notify
+    exit 0
   fi ;
 
 }
 
 ########################################
 # Function: did_they_come_back
-# If a host from the previous attempt is still a reboot candidate, pull it out
-# of reboot candidates and into a still_down file.
-# If all hosts from the previous attempt are clean, scrub it from the
-# reboot_attempted file, because it succeeded.
+# If a host from the previous attempt is still a reboot candidate, log it in 
+# PROBLEMATIC and notify, but try again to reboot it.
+# Otherwise, log successful reboots in the REBOOT_LOG.
 # Input: Reads from REBOOT_ATTEMPTED and REBOOT_CANDIDATES
-# Output PROBLEMATIC 
+# Output: PROBLEMATIC and NOTIFICATION_EMAIL
+# TODO: (python rewrite) Test whether contents of PROBLEMATIC and REBOOT_LOG end up correct.
 # TODO: Reboot_log spreadsheet ID will be 1SnGHGy_ccvr4R5-_Pzn5bHr5Y986F9AT_v_GeFbgXto
 # https://docs.google.com/spreadsheets/d/1SnGHGy_ccvr4R5-_Pzn5bHr5Y986F9AT_v_GeFbgXto/edit#gid=0
 # example in mlabops/node-update/check_pipeline.py
 # https://developers.google.com/sheets/guides/values
 # https://developers.google.com/sheets/reference/rest/v4/spreadsheets.values
-# TODO: (python rewrite) Test whether contents of PROBLEMATIC and REBOOT_LOG end up correct.
 ########################################
 did_they_come_back() {
   echo "#### Starting did_they_come_back() ####"
 
-  #TODO: Make this take out bad entries from $REBOOT_CANDIDATES
   for line in `cat "${REBOOT_ATTEMPTED}"`; do
     attempted_host=`echo $line | awk -F: '{ print $1 }'`
     if grep -q "${attempted_host}" "${REBOOT_CANDIDATES}" ; then
-      echo "${attempted_host} still not up but requested during last run:" \
-        $line |tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
+      echo "${attempted_host} reboot tried during last run but still down:" \
+        $line | tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
     else
-      echo $line >> "${REBOOT_LOG}"
+      echo $line >> "${REBOOT_LOG}" && echo "$attempted_host was rebooted" \
+        "successfully during the last run." >> "${NOTIFICATION_EMAIL}"
     fi
   done
-
-  for candidate in `cat "${REBOOT_CANDIDATES}"`; do
-    if grep -q $candidate "${REBOOT_ATTEMPTED}" ; then
-      echo "$candidate still not up but requested during last run:" \
-        $line |tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
-     else 
-	echo $candidate >> ${REBOOT_CANDIDATES}.tmp 
-     fi
-  done
-
-# Write this backwards, so that if a line in reboot candidates is also found in 
-# REBOOT_ATTEMPTED, then write it out to problematic?
-# TODO: Is it ok to leave it on the REBOOT_CANDIDATES list to try again, even 
-# if it didn't come back right from the last run?
 }
 
 ########################################
@@ -255,21 +234,20 @@ has_it_been_24_hrs() {
   rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
   for host in `cat "${REBOOT_CANDIDATES}"`; do
     if grep -q $host "${REBOOT_LOG}" ; then
-      PREVIOUS_REBOOT=`grep $host $REBOOT_LOG | head -1 | awk -F: '{print $3 }'`
+      PREVIOUS_REBOOT=`grep $host $REBOOT_LOG | tail -1 | awk -F: '{print $3 }'`
       SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
       if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
         echo $host >> "${REBOOT_CANDIDATES}.tmp"
       else
         echo "Less than a day since $host was rebooted (${SECONDS_SINCE_REBOOT}" \
-          "seconds. Should be more than 86400.) Not ok to reboot." >> ${NOTIFICATION_EMAIL}
+          "seconds. Should be more than 86400.) Not ok to reboot." \
+            | tee -a "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
       fi
     else
       echo $host >> "${REBOOT_CANDIDATES}.tmp"
     fi
   done
-
-mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
-
+  mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
 }
 
 ########################################
@@ -282,25 +260,23 @@ mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
 perform_the_reboot() {
   echo "#### Starting perform_the_reboot ####"
 
-  # make a fresh copy of ${REBOOT_ATTEMPTED}. Any relevant entries from the 
-  # previous run are processed into REBOOT_LOG or $PROBLEMATIC in the did_they_come_back() function.
+  # Make a fresh copy of ${REBOOT_ATTEMPTED}. Any relevant entries from the
+  # previous run are processed into REBOOT_LOG or $PROBLEMATIC in the
+  # did_they_come_back() function.
   rm -f "${REBOOT_ATTEMPTED}" && touch "${REBOOT_ATTEMPTED}"
   if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
-  #if [[ -s "${REBOOT_ME}" ]] ; then
-    #if [[ `cat "${REBOOT_ME}" | wc -l` -gt 5 ]] ; then
     if [[ `cat "${REBOOT_CANDIDATES}" | wc -l` -gt 5 ]] ; then
       echo "There are more than 5 hosts queued for reboot. This is unusual" \
-        "and could be dangerous! Please check the fleet for problems. " \
-        "Exiting." >> ${NOTIFICATION_EMAIL}
+        "and could be dangerous! Please check the fleet for problems." \
+        | tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
     else
-      # TODO: call drac.py to do this automatically
-      echo "Please reboot these:"
-      # cat "${REBOOT_ME}"
-      cat "${REBOOT_CANDIDATES}"
-      # for line in `cat "${REBOOT_ME}"`; do
       for line in `cat "${REBOOT_CANDIDATES}"`; do
         echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
+        # TODO: use drac.py after approved and tested
+        # $HOME/git/operator/tools/drac.py reboot $line
       done
+      echo "Please reboot these:"
+      cat "${REBOOT_ATTEMPTED}"
     fi
   else
    echo "No machines to reboot."
@@ -309,6 +285,8 @@ perform_the_reboot() {
 
 ########################################
 # Notify
+# TODO: email interested parties. "Interested parties" seems like a candidate
+# for an M-Lab env var or module.
 ########################################
 notify() {
   if [[ -s "${NOTIFICATION_EMAIL}" ]] ; then
@@ -327,19 +305,17 @@ quit() {
 ########################################
 # Run the functions
 ########################################
-# make a --test flag
-# set up some known inputs
+# TODO: make a --test flag and create some known inputs
 
-#fresh_dirs
-#find_all_hosts ssh
-#find_all_hosts sshalt
-
-#find_down_hosts ssh
-#find_down_hosts sshalt
-#no_down_nodes
-#find_reboot_candidates
+fresh_dirs
+find_all_hosts ssh
+find_all_hosts sshalt
+find_down_hosts ssh
+find_down_hosts sshalt
+no_down_nodes
+find_reboot_candidates
 did_they_come_back
 has_it_been_24_hrs
-#perform_the_reboot
-quit
+perform_the_reboot
 notify
+quit
