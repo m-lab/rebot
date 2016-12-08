@@ -169,31 +169,31 @@ find_reboot_candidates() {
   # TODO: email interested parties. "Interested parties" seems like a candidate
   # for an M-Lab env var/M-Lab module.
   #echo "Now looking for down switches and removing them from REBOOT_CANDIDATES"
-  # rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
 
 # This way is written so that if a host attached to a down switch is found in 
 # ${REBOOT_CANDIDATES}, it is removed.
 # Instead, look through ${REBOOT_CANDIDATES}, writing out any host that is NOT
 # found in ${DOWN_SWITCHES}, then writing the found lines to problematic?
 
-  if [[ -s "${DOWN_SWITCHES}" ]] ; then
-    for line in `cat "${DOWN_SWITCHES}"`; do
-      switch=`echo $line | awk -F. '{ print $2 }'`
-      if grep -q "${switch}" "${REBOOT_CANDIDATES}" ; then
-        echo "${switch} is down! Please investigate and ask site partners to" \
-          "reboot if needed." >> ${NOTIFICATION_EMAIL}
-        grep -v $switch "${REBOOT_CANDIDATES}" > "${REBOOT_CANDIDATES}".tmp
-        mv  "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+  rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
+  for line in `cat "${REBOOT_CANDIDATES}"`; do
+    switch=`echo $line | awk -F: '{ print $2 }'`
+    if grep -q $switch ${DOWN_SWITCHES} ; then
+      echo "$line belongs to a switch that's down. Don't reboot." |tee -a \
+        ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
+    else
+      echo $host >>  ${REBOOT_CANDIDATES}.tmp
     fi
-    done
-  fi ;
+  done
 
+  mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
   echo "Switch-free Contents of REBOOT_CANDIDATES:"
   if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
     cat "${REBOOT_CANDIDATES}"
     echo ""
   else echo "Blue skies: There are no new reboot candidates."
   fi ;
+
 }
 
 ########################################
@@ -213,7 +213,8 @@ find_reboot_candidates() {
 ########################################
 did_they_come_back() {
   echo "#### Starting did_they_come_back() ####"
-#TODO: Make this take out bad entries from $REBOOT_CANDIDATES
+
+  #TODO: Make this take out bad entries from $REBOOT_CANDIDATES
   for line in `cat "${REBOOT_ATTEMPTED}"`; do
     attempted_host=`echo $line | awk -F: '{ print $1 }'`
     if grep -q "${attempted_host}" "${REBOOT_CANDIDATES}" ; then
@@ -223,12 +224,20 @@ did_they_come_back() {
       echo $line >> "${REBOOT_LOG}"
     fi
   done
+
+  for candidate in `cat "${REBOOT_CANDIDATES}"`; do
+    if grep -q $candidate "${REBOOT_ATTEMPTED}" ; then
+      echo "$candidate still not up but requested during last run:" \
+        $line |tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
+     else 
+	echo $candidate >> ${REBOOT_CANDIDATES}.tmp 
+     fi
+  done
+
 # Write this backwards, so that if a line in reboot candidates is also found in 
 # REBOOT_ATTEMPTED, then write it out to problematic?
 # TODO: Is it ok to leave it on the REBOOT_CANDIDATES list to try again, even 
 # if it didn't come back right from the last run?
-
-
 }
 
 ########################################
