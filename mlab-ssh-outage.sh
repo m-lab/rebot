@@ -16,7 +16,7 @@
 TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
 EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
-#REBOT_LOG_DIR="/tmp/rebot"
+#REBOT_LOG_DIR="/var/log/rebot"
 REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
@@ -39,16 +39,17 @@ PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
 fresh_dirs() {
   echo "#### Starting fresh_dirs(). Resetting the output dir. ####"
 
-  rm -r "${SSH_OUTAGE_TEMP_DIR}" > /dev/null 2>&1
-  mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
-  echo "This directory gets recreated with fresh status files every time \
-    rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
-
   if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
     mkdir -p "${REBOOT_HISTORY_DIR}"
     echo "This is a persistent directory that holds historical reboot \
       information." > "${REBOOT_HISTORY_DIR}/README"
   fi
+
+  rm -r "${SSH_OUTAGE_TEMP_DIR}" > /dev/null 2>&1
+  mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
+  echo "This directory gets recreated with fresh status files every time \
+    rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
+
 }
 
 ########################################
