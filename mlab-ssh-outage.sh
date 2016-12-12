@@ -326,6 +326,7 @@ quit() {
 # Run the functions
 ########################################
 # TODO: make a --test flag and create some known inputs
+# TODO: make a --dryrun flag that shows reboot candidates but doesn't act
 
 fresh_dirs
 find_all_hosts ssh "${ALL_HOSTS_SSH}"
