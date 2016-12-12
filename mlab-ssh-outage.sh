@@ -22,8 +22,8 @@ SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
 ALL_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
 ALL_HOSTS_SSHALT="${SSH_OUTAGE_TEMP_DIR}/all_hosts_sshalt"
-DOWN_NODES_SSH="${SSH_OUTAGE_TEMP_DIR}/down_hosts_ssh"
-DOWN_NODES_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
+DOWN_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/down_hosts_ssh"
+DOWN_HOSTS_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
 DOWN_SWITCHES="${SSH_OUTAGE_TEMP_DIR}/down_switches_ssh"
 REBOOT_CANDIDATES="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates"
 REBOOT_CANDIDATES_1="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates.1"
@@ -41,6 +41,7 @@ fresh_dirs() {
 
   if [ ! -d "${REBOOT_HISTORY_DIR}" ]; then
     mkdir -p "${REBOOT_HISTORY_DIR}"
+    touch "${REBOOT_LOG}"
     echo "This is a persistent directory that holds historical reboot \
       information." > "${REBOOT_HISTORY_DIR}/README"
   fi
@@ -137,18 +138,21 @@ find_down_hosts() {
     fi
   done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${1}"
 
+  echo "Contents of output file:"
+  cat "$output_file"
+
 }
 
 ########################################
 # Function: no_down_nodes
 # Exit here if there are no nodes reporting down.
 # Supporting "Blue skies" as an M-Lab standard for reporting good news. :-)
-# Inputs: DOWN_NODES_SSH, DOWN_NODES_SSHALT
+# Inputs: DOWN_HOSTS_SSH, DOWN_HOSTS_SSHALT
 ########################################
 no_down_nodes() {
-  echo "#### Starting no_down_nodes() ####"
+  echo "#### Starting no_down_hosts() ####"
 
-  if [[ -s "${DOWN_NODES_SSH}" ]] && [[ -s "${DOWN_NODES_SSHALT}" ]]; then
+  if [[ -s "${DOWN_HOSTS_SSH}" ]] && [[ -s "${DOWN_HOSTS_SSHALT}" ]]; then
     # TODO: unit test: echo "There are down hosts to check; continuing"
     true
   else echo "Blue skies: There are no down hosts; exiting"
@@ -160,36 +164,40 @@ no_down_nodes() {
 # Function: find_reboot_candidates
 # Find nodes that are down according to both ssh and sshalt checks.
 # Strip out hosts associated with a down switch
-# Inputs: DOWN_NODES_SSH, DOWN_NODES_SSHALT, DOWN_SWITCHES
+# Inputs: DOWN_HOSTS_SSH, DOWN_HOSTS_SSHALT, DOWN_SWITCHES
 # Output: REBOOT_CANDIDATES
 ########################################
 find_reboot_candidates() {
   echo "#### Starting find_reboot_candidates() ####"
 
   # If a node's ssh and sshalt statuses are both down, it's a candidate for reboot
-  comm -12 <( sort "${DOWN_NODES_SSH}") <( sort "${DOWN_NODES_SSHALT}" ) > \
+  comm -12 <( sort "${DOWN_HOSTS_SSH}") <( sort "${DOWN_HOSTS_SSHALT}" ) > \
     "${REBOOT_CANDIDATES}"
+
+  echo "Contents of reboot candidates:"
+  cat "${REBOOT_CANDIDATES}"
 
   # TODO: unit test to make sure $REBOOT_CANDIDATES exists
   # echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
   # cat "${REBOOT_CANDIDATES}"
 
-  rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
+  #rm -f "${REBOOT_CANDIDATES}."tmp && touch "${REBOOT_CANDIDATES}".tmp
   for line in `cat "${REBOOT_CANDIDATES}"`; do
     switch=`echo $line | awk -F. '{ print $2 }'`
     if grep -q $switch ${DOWN_SWITCHES} ; then
       echo "The switch at $switch is down. Please fix it." |tee -a \
         ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
     else
-      echo $host >>  ${REBOOT_CANDIDATES}.tmp
+      echo $line >>  "${REBOOT_CANDIDATES}".tmp
     fi
   done
 
-  mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
+  # mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
+  cp "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
 
   if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
     echo "Switch-free Contents of REBOOT_CANDIDATES:"
-    cat "${REBOOT_CANDIDATES}"
+    cat "${REBOOT_CANDIDATES}".tmp
     echo ""
   else
     # Don't exit if there are no new candidates. Need to notify about down switches.
@@ -241,23 +249,25 @@ did_they_come_back() {
 has_it_been_24_hrs() {
   echo "#### Starting has_it_been_24_hrs ####"
 
-  rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
+  rm -f "${REBOOT_CANDIDATES}".tmp && touch "${REBOOT_CANDIDATES}".tmp
   for host in `cat "${REBOOT_CANDIDATES}"`; do
+    touch "${REBOOT_LOG}"
     if grep -q $host "${REBOOT_LOG}" ; then
       PREVIOUS_REBOOT=`grep $host $REBOOT_LOG | tail -1 | awk -F: '{print $3 }'`
       SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
       if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
-        echo $host >> "${REBOOT_CANDIDATES}.tmp"
+        echo $host >> "${REBOOT_CANDIDATES}".tmp
       else
         echo "Less than a day since $host was rebooted (${SECONDS_SINCE_REBOOT}" \
           "seconds. Should be more than 86400.) Not ok to reboot." \
             | tee -a "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
       fi
     else
-      echo $host >> "${REBOOT_CANDIDATES}.tmp"
+      echo $host >> "${REBOOT_CANDIDATES}".tmp
     fi
   done
-  mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
+  #mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
+  cp "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
 }
 
 ########################################
@@ -320,8 +330,8 @@ quit() {
 fresh_dirs
 find_all_hosts ssh "${ALL_HOSTS_SSH}"
 find_all_hosts sshalt "${ALL_HOSTS_SSHALT}"
-find_down_hosts ssh "${DOWN_NODES_SSH}"
-find_down_hosts sshalt "${DOWN_NODES_SSHALT}"
+find_down_hosts ssh "${DOWN_HOSTS_SSH}"
+find_down_hosts sshalt "${DOWN_HOSTS_SSHALT}"
 no_down_nodes
 find_reboot_candidates
 did_they_come_back
