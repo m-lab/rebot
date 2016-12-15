@@ -17,7 +17,7 @@ TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
 EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
 #REBOT_LOG_DIR="/var/log/rebot"
-REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing"
+REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing-2"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
 ALL_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
@@ -26,7 +26,7 @@ DOWN_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/down_hosts_ssh"
 DOWN_HOSTS_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
 DOWN_SWITCHES="${SSH_OUTAGE_TEMP_DIR}/down_switches_ssh"
 REBOOT_CANDIDATES="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates"
-REBOOT_CANDIDATES_1="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates.1"
+REBOOT_CANDIDATES_TMP="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates.tmp"
 NOTIFICATION_EMAIL="${SSH_OUTAGE_TEMP_DIR}/rebot_notify.out"
 REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
@@ -67,8 +67,8 @@ fresh_dirs() {
 find_all_hosts() {
   echo "#### Starting find_all_hosts(). Getting status of $1 from Nagios. ####"
 
-  local service_name=$1
-  local output_file=$2
+  local service_name="${1}"
+  local output_file="${2}"
 # Configure a user's login to Nagios.  For more information on netrc files, see
   # the manpage for curl.  If a netrc file doesn't exist, then the user will be
   # prompted to enter credentials.
@@ -81,17 +81,11 @@ find_all_hosts() {
     echo -e '\n'
   fi
 
-  # curl -s "${nagios_auth}" -o "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" --digest --netrc \
-  curl -s "${nagios_auth}" -o $output_file --digest --netrc \
-    "http://nagios.measurementlab.net/baseList?show_state=1&service_name="$1"&plugin_output=0&show_problem_acknowledged=1"
+  curl -s "${nagios_auth}" -o "${output_file}" --digest --netrc \
+    "http://nagios.measurementlab.net/baseList?show_state=1&service_name="${service_name}"&plugin_output=0&show_problem_acknowledged=1"
 
   # TODO: Make this a unit test
-  # if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
-  #if [[ -s "${SSH_OUTAGE_TEMP_DIR}"/all_hosts_"$1" ]] ; then
-  if [[ -s $output_file ]] ; then
-    true
-  else
-    # echo "No output of $1 ${ALL_HOSTS_}$1. That shouldn't happen. It's " \
+  if [[ ! -s "${output_file}" ]] ; then
     echo "No output of $service_name $output_file. That shouldn't happen. It's " \
       "possible the connection to the Nagios server failed."
     echo ""
@@ -110,13 +104,13 @@ find_all_hosts() {
 ########################################
 find_down_hosts() {
   echo "#### Starting find_down_hosts(), hosts in hard state 1 for $1 ####"
-  local service_name=$1
-  local output_file=$2
+  local service_name="${1}"
+  local output_file="${2}"
   # Make the down_hosts file creation idempotent to avoid unintentional appends
   # if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}" ]; then
     # rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
-  if [ -f $output_file ]; then
-    rm "$output_file" && touch "$output_file"
+  if [ -f "${output_file}" ]; then
+    rm "${output_file}" && touch "${output_file}"
   fi
 
   if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}" ]; then
@@ -131,15 +125,15 @@ find_down_hosts() {
     if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
       [[ "$problem_acknowledged" == 0 ]]; then
       echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
-	>> $output_file
-	# >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
+        >> "${output_file}"
+        # >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
       echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
-	>> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
+        >> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
     fi
   done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${1}"
 
-  echo "Contents of output file:"
-  cat "$output_file"
+  # echo "Contents of output file:"
+  # cat "${output_file}"
 
 }
 
@@ -152,11 +146,12 @@ find_down_hosts() {
 no_down_nodes() {
   echo "#### Starting no_down_hosts() ####"
 
-  if [[ -s "${DOWN_HOSTS_SSH}" ]] && [[ -s "${DOWN_HOSTS_SSHALT}" ]]; then
+  if [[ ! -s "${DOWN_HOSTS_SSH}" ]] && [[ ! -s "${DOWN_HOSTS_SSHALT}" ]]; then
+    echo "Blue skies: There are no down hosts; exiting"
+      exit 0
+   else
     # TODO: unit test: echo "There are down hosts to check; continuing"
     true
-  else echo "Blue skies: There are no down hosts; exiting"
-   exit 0
   fi
 }
 
@@ -174,30 +169,29 @@ find_reboot_candidates() {
   comm -12 <( sort "${DOWN_HOSTS_SSH}") <( sort "${DOWN_HOSTS_SSHALT}" ) > \
     "${REBOOT_CANDIDATES}"
 
-  echo "Contents of reboot candidates:"
-  cat "${REBOOT_CANDIDATES}"
+  # echo "Contents of reboot candidates:"
+  # cat "${REBOOT_CANDIDATES}"
 
   # TODO: unit test to make sure $REBOOT_CANDIDATES exists
   # echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
   # cat "${REBOOT_CANDIDATES}"
 
-  #rm -f "${REBOOT_CANDIDATES}."tmp && touch "${REBOOT_CANDIDATES}".tmp
+  rm -f "${REBOOT_CANDIDATES_TMP}" && touch "${REBOOT_CANDIDATES_TMP}"
   for line in `cat "${REBOOT_CANDIDATES}"`; do
-    switch=`echo $line | awk -F. '{ print $2 }'`
-    if grep -q $switch ${DOWN_SWITCHES} ; then
-      echo "The switch at $switch is down. Please fix it." |tee -a \
-        ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
+    switch=`echo "${line}" | awk -F. '{ print $2 }'`
+    if grep -q "${switch}" "${DOWN_SWITCHES}" ; then
+      echo "The switch at "${switch}" is down. Please fix it." |tee -a \
+        "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
     else
-      echo $line >>  "${REBOOT_CANDIDATES}".tmp
+      echo "${line}" >>  "${REBOOT_CANDIDATES_TMP}"
     fi
   done
 
-  # mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
-  cp "${REBOOT_CANDIDATES}".tmp "${REBOOT_CANDIDATES}"
+  mv "${REBOOT_CANDIDATES_TMP}" "${REBOOT_CANDIDATES}"
 
   if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
     echo "Switch-free Contents of REBOOT_CANDIDATES:"
-    cat "${REBOOT_CANDIDATES}".tmp
+    cat "${REBOOT_CANDIDATES}"
     echo ""
   else
     # Don't exit if there are no new candidates. Need to notify about down switches.
@@ -226,12 +220,12 @@ did_they_come_back() {
   echo "#### Starting did_they_come_back() ####"
 
   for line in `cat "${REBOOT_ATTEMPTED}"`; do
-    attempted_host=`echo $line | awk -F: '{ print $1 }'`
+    attempted_host=`echo "${line}" | awk -F: '{ print $1 }'`
     if grep -q "${attempted_host}" "${REBOOT_CANDIDATES}" ; then
       echo "${attempted_host} reboot tried during last run but still down:" \
-        $line | tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
+        "${line}" | tee -a "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
     else
-      echo $line >> "${REBOOT_LOG}" && echo "$attempted_host was rebooted" \
+      echo "${line}" >> "${REBOOT_LOG}" && echo "${attempted_host} was rebooted" \
         "successfully during the last run." >> "${NOTIFICATION_EMAIL}"
     fi
   done
@@ -249,25 +243,27 @@ did_they_come_back() {
 has_it_been_24_hrs() {
   echo "#### Starting has_it_been_24_hrs ####"
 
-  rm -f "${REBOOT_CANDIDATES}".tmp && touch "${REBOOT_CANDIDATES}".tmp
+  rm -f "${REBOOT_CANDIDATES_TMP}" && touch "${REBOOT_CANDIDATES_TMP}"
+#  rm -f "${REBOOT_CANDIDATES}".tmp 
+  # && touch "${REBOOT_CANDIDATES}".tmp
   for host in `cat "${REBOOT_CANDIDATES}"`; do
-    touch "${REBOOT_LOG}"
-    if grep -q $host "${REBOOT_LOG}" ; then
-      PREVIOUS_REBOOT=`grep $host $REBOOT_LOG | tail -1 | awk -F: '{print $3 }'`
-      SECONDS_SINCE_REBOOT=$(($EPOCH_NOW - $PREVIOUS_REBOOT ))
+    # touch "${REBOOT_LOG}"
+    if grep -q "${host}" "${REBOOT_LOG}" ; then
+      PREVIOUS_REBOOT=`grep "${host}" "${REBOOT_LOG}" | tail -1 | awk -F: '{print $3 }'`
+      SECONDS_SINCE_REBOOT=$((${EPOCH_NOW} - ${PREVIOUS_REBOOT} ))
       if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
-        echo $host >> "${REBOOT_CANDIDATES}".tmp
+        echo "${host}" >> "${REBOOT_CANDIDATES_TMP}"
       else
         echo "Less than a day since $host was rebooted (${SECONDS_SINCE_REBOOT}" \
           "seconds. Should be more than 86400.) Not ok to reboot." \
             | tee -a "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
       fi
     else
-      echo $host >> "${REBOOT_CANDIDATES}".tmp
+      echo "${host}" >> "${REBOOT_CANDIDATES_TMP}"
     fi
   done
-  #mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
-  cp "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
+  #mv "${REBOOT_CANDIDATES_TMP}" "${REBOOT_CANDIDATES}"
+  cp "${REBOOT_CANDIDATES_TMP}" "${REBOOT_CANDIDATES}"
 }
 
 ########################################
@@ -328,12 +324,12 @@ quit() {
 # TODO: make a --test flag and create some known inputs
 # TODO: make a --dryrun flag that shows reboot candidates but doesn't act
 
-fresh_dirs
-find_all_hosts ssh "${ALL_HOSTS_SSH}"
-find_all_hosts sshalt "${ALL_HOSTS_SSHALT}"
-find_down_hosts ssh "${DOWN_HOSTS_SSH}"
-find_down_hosts sshalt "${DOWN_HOSTS_SSHALT}"
-no_down_nodes
+#fresh_dirs
+#find_all_hosts ssh "${ALL_HOSTS_SSH}"
+#find_all_hosts sshalt "${ALL_HOSTS_SSHALT}"
+#find_down_hosts ssh "${DOWN_HOSTS_SSH}"
+#find_down_hosts sshalt "${DOWN_HOSTS_SSHALT}"
+#no_down_nodes
 find_reboot_candidates
 did_they_come_back
 has_it_been_24_hrs
