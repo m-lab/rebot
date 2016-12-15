@@ -92,6 +92,7 @@ find_all_hosts() {
   fi ;
 }
 
+
 ########################################
 # Function: find_down_hosts
 # Search the ssh and sshalt reports for hosts in state 2 (bad state),
@@ -101,21 +102,19 @@ find_all_hosts() {
 # create files DOWN_HOSTS_SSH and/or DOWN_HOSTS_SSHALT, and DOWN_SWITCHES_SSH
 # Inputs: ALL_HOSTS_SSH, ALL_HOSTS_SSHALT
 # Outputs: DOWN_HOSTS_SSH, DOWN_HOSTS_SSHALT, DOWN_SWITCHES_SSH
+# find_down_hosts "^s1" "${ALL_HOSTS_SSH}" "${DOWN_SWITCHES}"
+# find_down_hosts "^mlab[1-4]" "${ALL_HOSTS_SSH}" "${DOWN_HOSTS_SSH}"
+# find_down_hosts "^mlab[1-4]" "${ALL_HOSTS_SSHALT}" "${DOWN_DOWN_HOSTS_SSHALT}"
 ########################################
 find_down_hosts() {
-  echo "#### Starting find_down_hosts(), hosts in hard state 1 for $1 ####"
-  local service_name="${1}"
-  local output_file="${2}"
-  # Make the down_hosts file creation idempotent to avoid unintentional appends
-  # if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}" ]; then
-    # rm "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
-  if [ -f "${output_file}" ]; then
-    rm "${output_file}" && touch "${output_file}"
-  fi
-
-  if [ -f "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}" ]; then
-    rm "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
-  fi
+  echo "#### Starting find_down_hosts() ####"
+  local filter="${1}"
+  local service_name="${2}"
+  local output_file="${3}"
+  #if [ -f "${output_file}" ]; then
+  #  echo "deleting "$output_file""
+  #  rm "${output_file}" && touch "${output_file}"
+  #fi
 
   while read line; do
     host="$(echo $line | awk '{print $1 }')"
@@ -124,16 +123,10 @@ find_down_hosts() {
     problem_acknowledged="$(echo $line | awk '{ print $4 }')"
     if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
       [[ "$problem_acknowledged" == 0 ]]; then
-      echo "${host}" |grep -v ^s| awk -F. '{ print $1"."$2 }' \
+      echo "${host}" | grep "${filter}" | awk -F. '{ print $1"."$2 }' \
         >> "${output_file}"
-        # >> "${SSH_OUTAGE_TEMP_DIR}/down_hosts_${1}"
-      echo "${host}" |grep ^s | awk -F. '{ print $1"."$2 }' \
-        >> "${SSH_OUTAGE_TEMP_DIR}/down_switches_${1}"
     fi
-  done < "${SSH_OUTAGE_TEMP_DIR}/all_hosts_${1}"
-
-  # echo "Contents of output file:"
-  # cat "${output_file}"
+  done < "${service_name}"
 
 }
 
@@ -324,12 +317,13 @@ quit() {
 # TODO: make a --test flag and create some known inputs
 # TODO: make a --dryrun flag that shows reboot candidates but doesn't act
 
-#fresh_dirs
-#find_all_hosts ssh "${ALL_HOSTS_SSH}"
-#find_all_hosts sshalt "${ALL_HOSTS_SSHALT}"
-#find_down_hosts ssh "${DOWN_HOSTS_SSH}"
-#find_down_hosts sshalt "${DOWN_HOSTS_SSHALT}"
-#no_down_nodes
+fresh_dirs
+find_all_hosts ssh "${ALL_HOSTS_SSH}"
+find_all_hosts sshalt "${ALL_HOSTS_SSHALT}"
+find_down_hosts "^s1" "${ALL_HOSTS_SSH}" "${DOWN_SWITCHES}"
+find_down_hosts "^mlab[1-4]" "${ALL_HOSTS_SSH}" "${DOWN_HOSTS_SSH}"
+find_down_hosts "^mlab[1-4]" "${ALL_HOSTS_SSHALT}" "${DOWN_HOSTS_SSHALT}"
+no_down_nodes
 find_reboot_candidates
 did_they_come_back
 has_it_been_24_hrs
