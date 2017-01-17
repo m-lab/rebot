@@ -26,7 +26,6 @@ DOWN_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/down_hosts_ssh"
 DOWN_HOSTS_SSHALT="${SSH_OUTAGE_TEMP_DIR}/down_hosts_sshalt"
 DOWN_SWITCHES="${SSH_OUTAGE_TEMP_DIR}/down_switches_ssh"
 REBOOT_CANDIDATES="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates"
-REBOOT_CANDIDATES_TMP="${SSH_OUTAGE_TEMP_DIR}/reboot_candidates.tmp"
 NOTIFICATION_EMAIL="${SSH_OUTAGE_TEMP_DIR}/rebot_notify.out"
 REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
@@ -50,7 +49,6 @@ fresh_dirs() {
   mkdir -p "${SSH_OUTAGE_TEMP_DIR}"
   echo "This directory gets recreated with fresh status files every time \
     rebot runs." > "${SSH_OUTAGE_TEMP_DIR}/README"
-
 }
 
 ########################################
@@ -69,7 +67,7 @@ find_all_hosts() {
 
   local service_name="${1}"
   local output_file="${2}"
-# Configure a user's login to Nagios.  For more information on netrc files, see
+  # Configure a user's login to Nagios.  For more information on netrc files, see
   # the manpage for curl.  If a netrc file doesn't exist, then the user will be
   # prompted to enter credentials.
   if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
@@ -111,10 +109,6 @@ find_down_hosts() {
   local filter="${1}"
   local service_name="${2}"
   local output_file="${3}"
-  #if [ -f "${output_file}" ]; then
-  #  echo "deleting "$output_file""
-  #  rm "${output_file}" && touch "${output_file}"
-  #fi
 
   while read line; do
     host="$(echo $line | awk '{print $1 }')"
@@ -161,35 +155,27 @@ find_reboot_candidates() {
   comm -12 <( sort "${DOWN_HOSTS_SSH}") <( sort "${DOWN_HOSTS_SSHALT}" ) > \
     "${REBOOT_CANDIDATES}"
 
-  # echo "Contents of reboot candidates:"
-  # cat "${REBOOT_CANDIDATES}"
-
   # TODO: unit test to make sure $REBOOT_CANDIDATES exists
-  # echo "Contents of REBOOT_CANDIDATES after comparison of ssh and sshalt:"
-  # cat "${REBOOT_CANDIDATES}"
-
-  rm -f "${REBOOT_CANDIDATES_TMP}" && touch "${REBOOT_CANDIDATES_TMP}"
+  rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
   for line in `cat "${REBOOT_CANDIDATES}"`; do
     switch=`echo "${line}" | awk -F. '{ print $2 }'`
     if grep -q "${switch}" "${DOWN_SWITCHES}" ; then
       echo "The switch at "${switch}" is down. Please fix it." |tee -a \
         "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
     else
-      echo "${line}" >>  "${REBOOT_CANDIDATES_TMP}"
+      echo "${line}" >>  "${REBOOT_CANDIDATES}.tmp"
     fi
   done
 
-  mv "${REBOOT_CANDIDATES_TMP}" "${REBOOT_CANDIDATES}"
+  mv "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
 
   if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
     echo "Switch-free Contents of REBOOT_CANDIDATES:"
     cat "${REBOOT_CANDIDATES}"
     echo ""
   else
-    # Don't exit if there are no new candidates. Need to notify about down switches.
     echo "Blue skies: There are no new reboot candidates."
     notify
-#    exit 0
   fi ;
 
 }
@@ -235,24 +221,23 @@ did_they_come_back() {
 has_it_been_24_hrs() {
   echo "#### Starting has_it_been_24_hrs ####"
 
-  rm -f "${REBOOT_CANDIDATES_TMP}" && touch "${REBOOT_CANDIDATES_TMP}"
+  rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
   for host in `cat "${REBOOT_CANDIDATES}"`; do
     if grep -q "${host}" "${REBOOT_LOG}" ; then
       PREVIOUS_REBOOT=`grep "${host}" "${REBOOT_LOG}" | tail -1 | awk -F: '{print $3 }'`
       SECONDS_SINCE_REBOOT=$((${EPOCH_NOW} - ${PREVIOUS_REBOOT} ))
       if [ "${SECONDS_SINCE_REBOOT}" -gt 86400 ]; then
-        echo "${host}" >> "${REBOOT_CANDIDATES_TMP}"
+        echo "${host}" >> "${REBOOT_CANDIDATES}.tmp"
       else
         echo "Less than a day since $host was rebooted (${SECONDS_SINCE_REBOOT}" \
           "seconds. Should be more than 86400.) Not ok to reboot." \
             | tee -a "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
       fi
     else
-      echo "${host}" >> "${REBOOT_CANDIDATES_TMP}"
+      echo "${host}" >> "${REBOOT_CANDIDATES}.tmp"
     fi
   done
-  #mv "${REBOOT_CANDIDATES_TMP}" "${REBOOT_CANDIDATES}"
-  cp "${REBOOT_CANDIDATES_TMP}" "${REBOOT_CANDIDATES}"
+  cp "${REBOOT_CANDIDATES}.tmp" "${REBOOT_CANDIDATES}"
 }
 
 ########################################
@@ -266,8 +251,8 @@ perform_the_reboot() {
   echo "#### Starting perform_the_reboot ####"
 
   # Make a fresh copy of ${REBOOT_ATTEMPTED}. Any relevant entries from the
-  # previous run are processed into REBOOT_LOG or $PROBLEMATIC in the
-  # did_they_come_back() function.
+  # previous run are processed into REBOOT_LOG or PROBLEMATIC in the
+  # function did_they_come_back().
   rm -f "${REBOOT_ATTEMPTED}" && touch "${REBOOT_ATTEMPTED}"
   if [[ -s "${REBOOT_CANDIDATES}" ]] ; then
     if [[ `cat "${REBOOT_CANDIDATES}" | wc -l` -gt 5 ]] ; then
@@ -295,7 +280,8 @@ perform_the_reboot() {
 ########################################
 notify() {
   if [[ -s "${NOTIFICATION_EMAIL}" ]] ; then
-    mail -s "Notification from ReBot" salarcon@opentechinstitute.org < ${NOTIFICATION_EMAIL}
+    mail -s "Notification from ReBot" salarcon@opentechinstitute.org \
+      < ${NOTIFICATION_EMAIL}
   fi
 }
 
