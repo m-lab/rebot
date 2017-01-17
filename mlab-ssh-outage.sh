@@ -17,7 +17,7 @@ TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
 EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
 #REBOT_LOG_DIR="/var/log/rebot"
-REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing-2"
+REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
 ALL_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
@@ -141,8 +141,7 @@ no_down_nodes() {
 
   if [[ ! -s "${DOWN_HOSTS_SSH}" ]] && [[ ! -s "${DOWN_HOSTS_SSHALT}" ]]; then
     echo "Blue skies: There are no down hosts; exiting"
-      exit 0
-   else
+  else
     # TODO: unit test: echo "There are down hosts to check; continuing"
     true
   fi
@@ -190,7 +189,7 @@ find_reboot_candidates() {
     # Don't exit if there are no new candidates. Need to notify about down switches.
     echo "Blue skies: There are no new reboot candidates."
     notify
-    exit 0
+#    exit 0
   fi ;
 
 }
@@ -237,10 +236,7 @@ has_it_been_24_hrs() {
   echo "#### Starting has_it_been_24_hrs ####"
 
   rm -f "${REBOOT_CANDIDATES_TMP}" && touch "${REBOOT_CANDIDATES_TMP}"
-#  rm -f "${REBOOT_CANDIDATES}".tmp 
-  # && touch "${REBOOT_CANDIDATES}".tmp
   for host in `cat "${REBOOT_CANDIDATES}"`; do
-    # touch "${REBOOT_LOG}"
     if grep -q "${host}" "${REBOOT_LOG}" ; then
       PREVIOUS_REBOOT=`grep "${host}" "${REBOOT_LOG}" | tail -1 | awk -F: '{print $3 }'`
       SECONDS_SINCE_REBOOT=$((${EPOCH_NOW} - ${PREVIOUS_REBOOT} ))
