@@ -204,6 +204,7 @@ did_they_come_back() {
       echo "${attempted_host} reboot tried during last run but still down:" \
         "${line}" | tee -a "${PROBLEMATIC}" "${NOTIFICATION_EMAIL}" > /dev/null
     else
+# TODO: The running log should be backed up somewhere. Google doc? Something else?
       echo "${line}" >> "${REBOOT_LOG}" && echo "${attempted_host} was rebooted" \
         "successfully during the last run." >> "${NOTIFICATION_EMAIL}"
     fi
@@ -281,6 +282,8 @@ perform_the_reboot() {
 # Notify
 # TODO: email interested parties. "Interested parties" seems like a candidate
 # for an M-Lab env var or module.
+# TODO: Separate notifications so that problems get sent right away (down
+# switch) but reboot notices get collected and sent daily.
 ########################################
 notify() {
   if [[ -s "${NOTIFICATION_EMAIL}" ]] ; then
