@@ -16,8 +16,8 @@
 TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
 EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
-#REBOT_LOG_DIR="/var/log/rebot"
-REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing"
+REBOT_LOG_DIR="/var/log/rebot"
+#REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
 ALL_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
@@ -30,6 +30,7 @@ NOTIFICATION_EMAIL="${SSH_OUTAGE_TEMP_DIR}/rebot_notify.out"
 REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
 PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
+TOOLS_DIR="/home/salarcon/git/operator/tools"
 ########################################
 # Function: fresh_dirs
 # Make a fresh SSH_OUTAGE_TEMP_DIR
@@ -262,11 +263,14 @@ perform_the_reboot() {
     else
       for line in `cat "${REBOOT_CANDIDATES}"`; do
         echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
-        # TODO: use drac.py after approved and tested
-        # $HOME/git/operator/tools/drac.py reboot $line
       done
-      echo "Please reboot these:"
-      cat "${REBOOT_ATTEMPTED}"
+
+  while read line; do
+    host="$(echo $line | awk -F: '{print $1 }')"
+      echo Rebooting "${host}"
+      $TOOLS_DIR/drac.py reboot ${host}
+  done < "${REBOOT_CANDIDATES}"
+
     fi
   else
    echo "No machines to reboot."
