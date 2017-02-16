@@ -263,15 +263,10 @@ perform_the_reboot() {
         | tee -a ${PROBLEMATIC} "${NOTIFICATION_EMAIL}" > /dev/null
     else
       for line in `cat "${REBOOT_CANDIDATES}"`; do
+        host="$(echo $line | awk -F: '{print $1 }')"
         echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
+       $TOOLS_DIR/drac.py reboot ${host} 
       done
-
-  while read line; do
-    host="$(echo $line | awk -F: '{print $1 }')"
-      echo Rebooting "${host}"
-      $TOOLS_DIR/drac.py reboot ${host}
-  done < "${REBOOT_CANDIDATES}"
-
     fi
   else
    echo "No machines to reboot."
