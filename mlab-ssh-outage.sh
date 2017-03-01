@@ -153,6 +153,7 @@ find_reboot_candidates() {
   echo "#### Starting find_reboot_candidates() ####"
 
   # If a node's ssh and sshalt statuses are both down, it's a candidate for reboot
+  # TODO make ${DOWN_HOSTS_SSH} and ${DOWN_HOSTS_SSHALT} parameters
   comm -12 <( sort "${DOWN_HOSTS_SSH}") <( sort "${DOWN_HOSTS_SSHALT}" ) > \
     "${REBOOT_CANDIDATES}"
 
@@ -265,7 +266,7 @@ perform_the_reboot() {
       for line in `cat "${REBOOT_CANDIDATES}"`; do
         host="$(echo $line | awk -F: '{print $1 }')"
         echo $line":"$TIMESTAMP":"$EPOCH_NOW >> "${REBOOT_ATTEMPTED}"
-       $TOOLS_DIR/drac.py reboot ${host} 
+        $TOOLS_DIR/drac.py reboot ${host}
       done
     fi
   else
