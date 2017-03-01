@@ -6,7 +6,7 @@
 # 3) the host isn't a straggler from the last run
 # 4) The host hasn't been rebooted in the last 24 hours
 # 5) There are no more than 5 hosts in the current reboot queue
-# Any machines that came back from the previous run are recorded. 
+# Any machines that came back from the previous run are recorded.
 #
 # TODO: This script sets the nagios server as eb.measurementlab.net. This should
 # be changed to import a general definition of the nagios server from a config
@@ -17,7 +17,6 @@ TIMESTAMP="$(date -u +%F_%H-%M)"
 EPOCH_NOW="$(date -u +%s)"
 EPOCH_YESTERDAY="$(date -u +%s --date='24 hours ago')"
 REBOT_LOG_DIR="/var/log/rebot"
-#REBOT_LOG_DIR="/home/steph/work/OTI/m-lab/git/salarcon215/rebot/logs/rebot-testing"
 SSH_OUTAGE_TEMP_DIR="${REBOT_LOG_DIR}/ssh_outage"
 REBOOT_HISTORY_DIR="${REBOT_LOG_DIR}/reboot_history"
 ALL_HOSTS_SSH="${SSH_OUTAGE_TEMP_DIR}/all_hosts_ssh"
