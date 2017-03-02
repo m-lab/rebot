@@ -282,8 +282,8 @@ perform_the_reboot() {
 ########################################
 notify() {
   if [[ -s "${NOTIFICATION_EMAIL}" ]] ; then
-    mail -s "Notification from ReBot" -c salarcon@opentechinstitute.org \
-      critzo@opentechinstitute.org soltesz@google.com < ${NOTIFICATION_EMAIL}
+    mail -s "Notification from ReBot" -c alerts@measurementlab.net \
+      < ${NOTIFICATION_EMAIL}
   fi
 }
 
