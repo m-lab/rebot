@@ -110,13 +110,11 @@ find_down_hosts() {
   local service_name="${2}"
   local output_file="${3}"
 
-
   while read line; do
     host="$(echo $line | awk '{print $1 }')"
     state="$(echo $line | awk '{ print $2 }')"
     hard="$(echo $line | awk '{ print $3 }')"
     problem_acknowledged="$(echo $line | awk '{ print $4 }')"
-
     if [[ ${state} == 2 ]] && [[ ${hard} == 1 ]] && \
       [[ "$problem_acknowledged" == 0 ]]; then
       echo "${host}" | grep "${filter}" | awk -F. '{ print $1"."$2 }' \
@@ -284,7 +282,7 @@ perform_the_reboot() {
 ########################################
 notify() {
   if [[ -s "${NOTIFICATION_EMAIL}" ]] ; then
-    mail -s "Notification from ReBot" salarcon@opentechinstitute.org \
+    mail -s "Notification from ReBot" -c alerts@measurementlab.net \
       < ${NOTIFICATION_EMAIL}
   fi
 }
