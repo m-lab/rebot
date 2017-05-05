@@ -29,7 +29,7 @@ NOTIFICATION_EMAIL="${SSH_OUTAGE_TEMP_DIR}/rebot_notify.out"
 REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
 PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
-TOOLS_DIR="/home/salarcon/git/operator/tools"
+TOOLS_DIR="/opt/mlab/operator/tools"
 ########################################
 # Function: fresh_dirs
 # Make a fresh SSH_OUTAGE_TEMP_DIR
