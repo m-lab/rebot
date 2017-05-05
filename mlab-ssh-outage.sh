@@ -29,7 +29,7 @@ NOTIFICATION_EMAIL="${SSH_OUTAGE_TEMP_DIR}/rebot_notify.out"
 REBOOT_ATTEMPTED="${REBOOT_HISTORY_DIR}/reboot_attempted"
 REBOOT_LOG="${REBOOT_HISTORY_DIR}/reboot_log"
 PROBLEMATIC="${REBOOT_HISTORY_DIR}/problematic"
-TOOLS_DIR="/home/salarcon/git/operator/tools"
+TOOLS_DIR="/opt/mlab/operator/tools"
 ########################################
 # Function: fresh_dirs
 # Make a fresh SSH_OUTAGE_TEMP_DIR
@@ -70,16 +70,18 @@ find_all_hosts() {
   # Configure a user's login to Nagios.  For more information on netrc files, see
   # the manpage for curl.  If a netrc file doesn't exist, then the user will be
   # prompted to enter credentials.
-  if [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
+  if [[ -n "$NAGIOS_USER" ]] && [[ -n "$NAGIOS_PASS" ]]; then
+    nagios_auth="-u${NAGIOS_USER}:${NAGIOS_PASS}"
+  elif [ -f ~/.netrc ] && grep -q 'nagios.measurementlab.net' ~/.netrc; then
     nagios_auth='--netrc'
   else
     read -p "Nagios login: " nagios_login
     read -s -p "Nagios password: " nagios_pass
-    nagios_auth="--user ${nagios_login}:${nagios_pass}"
+    nagios_auth="-u${nagios_login}:${nagios_pass}"
     echo -e '\n'
   fi
 
-  curl -s "${nagios_auth}" -o "${output_file}" --digest --netrc \
+  curl -s -o "${output_file}" --digest "${nagios_auth}" \
     "http://nagios.measurementlab.net/baseList?show_state=1&service_name="${service_name}"&plugin_output=0&show_problem_acknowledged=1"
 
   # TODO: Make this a unit test
