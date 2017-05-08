@@ -157,8 +157,10 @@ find_reboot_candidates() {
 
   # If a node's ssh and sshalt statuses are both down, it's a candidate for reboot
   # TODO make ${DOWN_HOSTS_SSH} and ${DOWN_HOSTS_SSHALT} parameters
-  comm -12 <( sort "${DOWN_HOSTS_SSH}") <( sort "${DOWN_HOSTS_SSHALT}" ) > \
-    "${REBOOT_CANDIDATES}"
+  if [[ -f "${DOWN_HOSTS_SSH}" ]] && [[ -f "${DOWN_HOSTS_SSHALT}" ]]; then
+    comm -12 <( sort "${DOWN_HOSTS_SSH}") <( sort "${DOWN_HOSTS_SSHALT}" ) > \
+      "${REBOOT_CANDIDATES}"
+  fi
 
   # TODO: unit test to make sure $REBOOT_CANDIDATES exists
   rm -f "${REBOOT_CANDIDATES}.tmp" && touch "${REBOOT_CANDIDATES}.tmp"
