@@ -288,7 +288,7 @@ perform_the_reboot() {
 ########################################
 notify() {
   if [[ -s "${NOTIFICATION_EMAIL}" ]] ; then
-    mail -s "Notification from ReBot" alerts@measurementlab.net \
+    mail -s "${TIMESTAMP} - Notification from ReBot" alerts@measurementlab.net \
       < ${NOTIFICATION_EMAIL}
   fi
 }
