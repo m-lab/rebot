@@ -14,8 +14,8 @@ import (
 
 /// Struct to hold history of a given service's outages
 type candidate struct {
-	Name     string
-	LastDown time.Time
+	Name       string
+	LastReboot time.Time
 }
 
 /// Run and other following structs replicate the Prometheus query
@@ -122,20 +122,20 @@ func main() {
 		if ok {
 			// This candidate has been down before.
 			// Check to see if the previous time was w/in the past 24 hours
-			if time.Now().Sub(thisCandidate.LastDown) > 24*time.Hour {
+			if time.Now().Sub(thisCandidate.LastReboot) > 24*time.Hour {
 				// If previous incident was more than 24 hours ago,
 				// its still a candidate, so add it to the list
 				realCandidates = append(realCandidates, thisCandidate.Name)
+				// Update the candidate with the current time and update the map
+				thisCandidate.LastReboot = time.Now()
+				candidateHistory[site] = thisCandidate
 			}
-			// Update the candidate with the current time and update the map
-			thisCandidate.LastDown = time.Now()
-			candidateHistory[site] = thisCandidate
 		} else {
 			// There's no candidate object in the map for this site
 			// so we have to create one and add it.
 			candidateHistory[site] = candidate{
-				Name:     site,
-				LastDown: time.Now(),
+				Name:       site,
+				LastReboot: time.Now(),
 			}
 			realCandidates = append(realCandidates, site)
 		}
