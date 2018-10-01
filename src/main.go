@@ -13,7 +13,7 @@ import (
 )
 
 /// Struct to hold history of a given service's outages
-type Candidate struct {
+type candidate struct {
 	Name     string
 	LastDown time.Time
 }
@@ -22,22 +22,22 @@ type Candidate struct {
 /// response JSON that we're getting. 'Value' is an interface
 /// because that JSON object is an array of two different
 /// types, which cannot be expressed in a type-safe language.
-type Run struct {
+type run struct {
 	Status string
-	Data   ResultsShell
+	Data   resultsShell
 }
 
-type ResultsShell struct {
+type resultsShell struct {
 	ResultType string
-	Result     []Result
+	Result     []result
 }
 
-type Result struct {
-	Metric Stats
+type result struct {
+	Metric stats
 	Value  []interface{}
 }
 
-type Stats struct {
+type stats struct {
 	Instace string
 	Job     string
 	Machine string
@@ -96,18 +96,18 @@ func main() {
 	// Sum should be 15. If < 15 query again to see if up now
 
 	// First, check to see if there's an existing candidate history file
-	var candidateHistory map[string]Candidate
+	var candidateHistory map[string]candidate
 	file, err := ioutil.ReadFile("/tmp/candidateHistory.json")
 	if err != nil {
 		// There is no existing candidate history file...
-		candidateHistory = make(map[string]Candidate)
+		candidateHistory = make(map[string]candidate)
 	} else {
 		json.Unmarshal(file, &candidateHistory)
 	}
 
 	user, pass := getCredentials()
 	promJSON := getStats(user, pass)
-	var marshalRun Run
+	var marshalRun run
 	json.Unmarshal(promJSON, &marshalRun)
 	var candidates []string
 	for _, site := range marshalRun.Data.Result {
@@ -118,22 +118,22 @@ func main() {
 	fmt.Println(candidates)
 	var realCandidates []string
 	for _, site := range candidates {
-		candidate, ok := candidateHistory[site]
+		thisCandidate, ok := candidateHistory[site]
 		if ok {
 			// This candidate has been down before.
 			// Check to see if the previous time was w/in the past 24 hours
-			if time.Now().Sub(candidate.LastDown) > 24*time.Hour {
+			if time.Now().Sub(thisCandidate.LastDown) > 24*time.Hour {
 				// If previous incident was more than 24 hours ago,
 				// its still a candidate, so add it to the list
-				realCandidates = append(realCandidates, candidate.Name)
+				realCandidates = append(realCandidates, thisCandidate.Name)
 			}
 			// Update the candidate with the current time and update the map
-			candidate.LastDown = time.Now()
-			candidateHistory[site] = candidate
+			thisCandidate.LastDown = time.Now()
+			candidateHistory[site] = thisCandidate
 		} else {
 			// There's no candidate object in the map for this site
 			// so we have to create one and add it.
-			candidateHistory[site] = Candidate{
+			candidateHistory[site] = candidate{
 				Name:     site,
 				LastDown: time.Now(),
 			}
