@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -10,6 +11,11 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/prometheus/common/model"
+
+	"github.com/prometheus/client_golang/api"
+	"github.com/prometheus/client_golang/api/prometheus/v1"
 )
 
 /// Struct to hold history of a given service's outages
@@ -18,50 +24,77 @@ type candidate struct {
 	LastReboot time.Time
 }
 
-/// Run and other following structs replicate the Prometheus query
-/// response JSON that we're getting. 'Value' is an interface
-/// because that JSON object is an array of two different
-/// types, which cannot be expressed in a type-safe language.
-type run struct {
-	Status string
-	Data   resultsShell
+type basicAuthRoundTripper struct {
+	username string
+	password string
+	rt       http.RoundTripper
 }
 
-type resultsShell struct {
-	ResultType string
-	Result     []result
+func NewBasicAuthRoundTripper(username, password string, rt http.RoundTripper) http.RoundTripper {
+	return &basicAuthRoundTripper{username, password, rt}
 }
 
-type result struct {
-	Metric stats
-	Value  []interface{}
+func (rt *basicAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if len(req.Header.Get("Authorization")) != 0 {
+		return rt.rt.RoundTrip(req)
+	}
+	//req = utilnet.CloneRequest(req)
+	req.SetBasicAuth(rt.username, rt.password)
+	return rt.rt.RoundTrip(req)
 }
 
-type stats struct {
-	Instace string
-	Job     string
-	Machine string
-	Module  string
-	Service string
-}
+func (rt *basicAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt }
 
-func getStats(username string, password string) []byte {
+// These correspond to the headers used in pkg/apis/authentication.  We don't want the package dependency,
+// but you must not change the values.
+const (
+	// ImpersonateUserHeader is used to impersonate a particular user during an API server request
+	ImpersonateUserHeader = "Impersonate-User"
+
+	// ImpersonateGroupHeader is used to impersonate a particular group during an API server request.
+	// It can be repeated multiplied times for multiple groups.
+	ImpersonateGroupHeader = "Impersonate-Group"
+
+	// ImpersonateUserExtraHeaderPrefix is a prefix for a header used to impersonate an entry in the
+	// extra map[string][]string for user.Info.  The key for the `extra` map is suffix.
+	// The same key can be repeated multiple times to have multiple elements in the slice under a single key.
+	// For instance:
+	// Impersonate-Extra-Foo: one
+	// Impersonate-Extra-Foo: two
+	// results in extra["Foo"] = []string{"one", "two"}
+	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
+)
+
+func getStats(username string, password string) (model.Vector, error) {
 	/// Takes two strings, representing the username and
 	/// password for the Prometheus API, and runs an
 	/// HTTP request against mlab-oti.
-	/// The non-urlencoded query is
-	/// "sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m])"
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", "https://prometheus.mlab-oti.measurementlab.net/api/v1/query?query=sum_over_time%28probe_success%7Bservice%3D%22ssh806%22%2C%20module%3D%22ssh_v4_online%22%7D%5B15m%5D%29", nil)
-	req.SetBasicAuth(username, password)
-	resp, err := client.Do(req)
-	if err != nil {
-		// If we can't access Prometheus, just exit
-		log.Fatal(err)
+	/// The query being used is:
+	/// (
+	/// sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m]) < 15
+	/// )
+	/// and on(machine)
+	/// (
+	/// gmx_machine_maintenance == 0
+	/// )
+
+	const QUERY = `(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m]) < 15)
+				    and on (machine)
+				   (gmx_machine_maintenance == 0)`
+	config := api.Config{
+		Address:      "https://prometheus.mlab-oti.measurementlab.net",
+		RoundTripper: NewBasicAuthRoundTripper(username, password, http.DefaultTransport),
 	}
-	bodyText, err := ioutil.ReadAll(resp.Body)
-	resp.Body.Close()
-	return bodyText
+	client, _ := api.NewClient(config)
+
+	ClientAPI := v1.NewAPI(client)
+
+	values, err := ClientAPI.Query(context.Background(), QUERY, time.Now())
+	if err != nil {
+		return nil, err
+	}
+
+	return values.(model.Vector), err
 }
 
 func getCredentials() (string, string) {
@@ -106,13 +139,11 @@ func main() {
 	}
 
 	user, pass := getCredentials()
-	promJSON := getStats(user, pass)
-	var marshalRun run
-	json.Unmarshal(promJSON, &marshalRun)
+	siteStats, _ := getStats(user, pass)
 	var candidates []string
-	for _, site := range marshalRun.Data.Result {
-		if site.Value[1] != "15" {
-			candidates = append(candidates, site.Metric.Machine)
+	for _, value := range siteStats {
+		if value.Value != 15 {
+			candidates = append(candidates, string(value.Metric["machine"]))
 		}
 	}
 	fmt.Println(candidates)
