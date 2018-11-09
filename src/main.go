@@ -96,6 +96,15 @@ func init() {
 	clientAPI = v1.NewAPI(client)
 }
 
+func getSwitches() (model.Vector, error) {
+	values, err := clientAPI.Query(context.Background(), switchQuery, time.Now())
+	if err != nil {
+		return nil, err
+	}
+
+	return values.(model.Vector), err
+}
+
 func getStats(minutes int) (model.Vector, error) {
 	/// Takes two strings, representing the username and
 	/// password for the Prometheus API, and runs an
@@ -151,10 +160,26 @@ func main() {
 		}
 	}
 
+	// Query for offline switches
+	offlineSites := make(map[string]bool)
+	switches, err := getSwitches()
+
+	for _, s := range switches {
+		offlineSites[string(s.Metric["site"])] = true
+	}
+
 	siteStats, _ := getStats(15)
+
 	var candidates []string
 	for _, value := range siteStats {
-		candidates = append(candidates, string(value.Metric["machine"]))
+		// Ignore machines in sites where the switch is offline.
+		site := string(value.Metric["site"])
+		if _, ok := offlineSites[site]; !ok {
+			candidates = append(candidates, string(value.Metric["machine"]))
+		} else {
+			println("Ignoring " + site + " as the switch is offline.")
+		}
+
 	}
 
 	fmt.Println(candidates)
