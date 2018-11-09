@@ -137,11 +137,11 @@ func main() {
 	siteStats, _ := getStats(user, pass, 15)
 	var candidates []string
 	for _, value := range siteStats {
-		if value.Value != 15 {
-			candidates = append(candidates, string(value.Metric["machine"]))
-		}
+		candidates = append(candidates, string(value.Metric["machine"]))
 	}
+
 	fmt.Println(candidates)
+
 	var realCandidates []string
 	for _, site := range candidates {
 		thisCandidate, ok := candidateHistory[site]
