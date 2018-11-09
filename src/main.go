@@ -20,9 +20,8 @@ import (
 
 /// Struct to hold history of a given service's outages
 type candidate struct {
-	Name              string
-	LastReboot        time.Time
-	LastRebootAttempt time.Time
+	Name       string
+	LastReboot time.Time
 }
 
 type basicAuthRoundTripper struct {
@@ -153,7 +152,7 @@ func main() {
 				// its still a candidate, so add it to the list
 				realCandidates = append(realCandidates, thisCandidate.Name)
 				// Update the candidate with the current time and update the map
-				thisCandidate.LastRebootAttempt = time.Now()
+				thisCandidate.LastReboot = time.Now()
 				candidateHistory[site] = thisCandidate
 			}
 		} else {
