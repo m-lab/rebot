@@ -65,7 +65,9 @@ const (
 )
 
 const (
-	nodeQuery = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0,
+	credentialsPath = "/tmp/credentials"
+	historyPath     = "/tmp/candidateHistory.json"
+	nodeQuery       = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0,
 				"site", "$1", "machine", ".+?\\.(.+?)\\..+")
 				unless on(machine) gmx_machine_maintenance == 1
 				unless on(site) gmx_site_maintenance == 1
@@ -115,7 +117,7 @@ func getCredentials() (string, string) {
 
 	/// TODO (ross) Figure out how to get credentials into the file
 	/// Best option is probably Travis secrets.
-	file, err := os.Open("/tmp/credentials")
+	file, err := os.Open(credentialsPath)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -135,17 +137,18 @@ func getCredentials() (string, string) {
 }
 
 func main() {
-	// Call prometheus API for ssh806 service over 15m
-	// Sum should be 15. If < 15 query again to see if up now
-
 	// First, check to see if there's an existing candidate history file
 	var candidateHistory map[string]candidate
-	file, err := ioutil.ReadFile("/tmp/candidateHistory.json")
+	file, err := ioutil.ReadFile(historyPath)
 	if err != nil {
 		// There is no existing candidate history file...
 		candidateHistory = make(map[string]candidate)
 	} else {
-		json.Unmarshal(file, &candidateHistory)
+		err = json.Unmarshal(file, &candidateHistory)
+
+		if err != nil {
+			panic("Cannot unmarshal " + historyPath)
+		}
 	}
 
 	siteStats, _ := getStats(15)
@@ -184,5 +187,5 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = ioutil.WriteFile("/tmp/candidateHistory.json", newCandidates, 0644)
+	err = ioutil.WriteFile(historyPath, newCandidates, 0644)
 }
