@@ -65,16 +65,19 @@ const (
 	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
 )
 
+const (
+	nodeQuery = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0,
+				"site", "$1", "machine", ".+?\\.(.+?)\\..+")
+				unless on(machine) gmx_machine_maintenance == 1
+				unless on(site) gmx_site_maintenance == 1
+				unless on (machine) lame_duck_node == 1`
+)
+
 func getStats(username string, password string, minutes int) (model.Vector, error) {
 	/// Takes two strings, representing the username and
 	/// password for the Prometheus API, and runs an
 	/// HTTP request against mlab-oti.
 
-	const QUERY = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0, 
-				   "site", "$1", "machine", ".+?\\.(.+?)\\..+") 
-				   unless on(machine) gmx_machine_maintenance == 1 
-				   unless on(site) gmx_site_maintenance == 1
-				   unless on (machine) lame_duck_node == 1`
 	config := api.Config{
 		Address:      "https://prometheus.mlab-oti.measurementlab.net",
 		RoundTripper: NewBasicAuthRoundTripper(username, password, http.DefaultTransport),
@@ -83,7 +86,7 @@ func getStats(username string, password string, minutes int) (model.Vector, erro
 
 	ClientAPI := v1.NewAPI(client)
 
-	values, err := ClientAPI.Query(context.Background(), fmt.Sprintf(QUERY, minutes), time.Now())
+	values, err := ClientAPI.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
 	}
