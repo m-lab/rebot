@@ -12,10 +12,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/prometheus/common/model"
-
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/model"
 )
 
 /// Struct to hold history of a given service's outages
@@ -71,22 +70,36 @@ const (
 				unless on(machine) gmx_machine_maintenance == 1
 				unless on(site) gmx_site_maintenance == 1
 				unless on (machine) lame_duck_node == 1`
+
+	// This is the same query that we use on Grafana to determine if a
+	// switch (and thus, site) is down.
+	switchQuery = `sum_over_time(up{job="snmp-targets"}[10m]) < 5`
 )
 
-func getStats(username string, password string, minutes int) (model.Vector, error) {
+var (
+	config    api.Config
+	client    api.Client
+	clientAPI v1.API
+)
+
+func init() {
+	user, pass := getCredentials()
+
+	config = api.Config{
+		Address:      "https://prometheus.mlab-oti.measurementlab.net",
+		RoundTripper: NewBasicAuthRoundTripper(user, pass, http.DefaultTransport),
+	}
+
+	client, _ = api.NewClient(config)
+	clientAPI = v1.NewAPI(client)
+}
+
+func getStats(minutes int) (model.Vector, error) {
 	/// Takes two strings, representing the username and
 	/// password for the Prometheus API, and runs an
 	/// HTTP request against mlab-oti.
 
-	config := api.Config{
-		Address:      "https://prometheus.mlab-oti.measurementlab.net",
-		RoundTripper: NewBasicAuthRoundTripper(username, password, http.DefaultTransport),
-	}
-	client, _ := api.NewClient(config)
-
-	ClientAPI := v1.NewAPI(client)
-
-	values, err := ClientAPI.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
+	values, err := clientAPI.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -135,8 +148,7 @@ func main() {
 		json.Unmarshal(file, &candidateHistory)
 	}
 
-	user, pass := getCredentials()
-	siteStats, _ := getStats(user, pass, 15)
+	siteStats, _ := getStats(15)
 	var candidates []string
 	for _, value := range siteStats {
 		candidates = append(candidates, string(value.Metric["machine"]))
