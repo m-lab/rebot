@@ -69,18 +69,11 @@ func getStats(username string, password string) (model.Vector, error) {
 	/// Takes two strings, representing the username and
 	/// password for the Prometheus API, and runs an
 	/// HTTP request against mlab-oti.
-	/// The query being used is:
-	/// (
-	/// sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m]) < 15
-	/// )
-	/// and on(machine)
-	/// (
-	/// gmx_machine_maintenance == 0
-	/// )
 
-	const QUERY = `(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m]) < 15)
-				    and on (machine)
-				   (gmx_machine_maintenance == 0)`
+	const QUERY = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m]) == 0, 
+				   "site", "$1", "machine", ".+?\\.(.+?)\\..+") 
+				   unless on(machine) gmx_machine_maintenance == 1 
+				   unless on(site) gmx_site_maintenance == 1 unless on (machine) lame_duck_node == 1`
 	config := api.Config{
 		Address:      "https://prometheus.mlab-oti.measurementlab.net",
 		RoundTripper: NewBasicAuthRoundTripper(username, password, http.DefaultTransport),
