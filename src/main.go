@@ -20,8 +20,9 @@ import (
 
 /// Struct to hold history of a given service's outages
 type candidate struct {
-	Name       string
-	LastReboot time.Time
+	Name              string
+	LastReboot        time.Time
+	LastRebootAttempt time.Time
 }
 
 type basicAuthRoundTripper struct {
@@ -65,15 +66,16 @@ const (
 	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
 )
 
-func getStats(username string, password string) (model.Vector, error) {
+func getStats(username string, password string, minutes int) (model.Vector, error) {
 	/// Takes two strings, representing the username and
 	/// password for the Prometheus API, and runs an
 	/// HTTP request against mlab-oti.
 
-	const QUERY = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m]) == 0, 
+	const QUERY = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0, 
 				   "site", "$1", "machine", ".+?\\.(.+?)\\..+") 
 				   unless on(machine) gmx_machine_maintenance == 1 
-				   unless on(site) gmx_site_maintenance == 1 unless on (machine) lame_duck_node == 1`
+				   unless on(site) gmx_site_maintenance == 1
+				   unless on (machine) lame_duck_node == 1`
 	config := api.Config{
 		Address:      "https://prometheus.mlab-oti.measurementlab.net",
 		RoundTripper: NewBasicAuthRoundTripper(username, password, http.DefaultTransport),
@@ -82,7 +84,7 @@ func getStats(username string, password string) (model.Vector, error) {
 
 	ClientAPI := v1.NewAPI(client)
 
-	values, err := ClientAPI.Query(context.Background(), QUERY, time.Now())
+	values, err := ClientAPI.Query(context.Background(), fmt.Sprintf(QUERY, minutes), time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +134,7 @@ func main() {
 	}
 
 	user, pass := getCredentials()
-	siteStats, _ := getStats(user, pass)
+	siteStats, _ := getStats(user, pass, 15)
 	var candidates []string
 	for _, value := range siteStats {
 		if value.Value != 15 {
@@ -151,7 +153,7 @@ func main() {
 				// its still a candidate, so add it to the list
 				realCandidates = append(realCandidates, thisCandidate.Name)
 				// Update the candidate with the current time and update the map
-				thisCandidate.LastReboot = time.Now()
+				thisCandidate.LastRebootAttempt = time.Now()
 				candidateHistory[site] = thisCandidate
 			}
 		} else {
