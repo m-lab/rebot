@@ -73,9 +73,9 @@ const (
 				unless on(site) gmx_site_maintenance == 1
 				unless on (machine) lame_duck_node == 1`
 
-	// This is the same query that we use on Grafana to determine if a
-	// switch (and thus, site) is down.
-	switchQuery = `sum_over_time(up{job="snmp-targets"}[10m]) < 5`
+	// To determine if a switch is offline, pings are generally more reliable
+	// than SNMP scraping.
+	switchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0`
 )
 
 var (
