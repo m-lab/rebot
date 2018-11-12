@@ -17,6 +17,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/m-lab/go/rtx"
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
@@ -31,43 +32,23 @@ type candidate struct {
 type basicAuthRoundTripper struct {
 	username string
 	password string
-	rt       http.RoundTripper
+	http.RoundTripper
 }
 
-func NewBasicAuthRoundTripper(username, password string, rt http.RoundTripper) http.RoundTripper {
+func newBasicAuthRoundTripper(username, password string, rt http.RoundTripper) http.RoundTripper {
 	return &basicAuthRoundTripper{username, password, rt}
 }
 
 func (rt *basicAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if len(req.Header.Get("Authorization")) != 0 {
-		return rt.rt.RoundTrip(req)
+		return rt.RoundTripper.RoundTrip(req)
 	}
-	//req = utilnet.CloneRequest(req)
+
 	req.SetBasicAuth(rt.username, rt.password)
-	return rt.rt.RoundTrip(req)
+	return rt.RoundTripper.RoundTrip(req)
 }
 
-func (rt *basicAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.rt }
-
-// These correspond to the headers used in pkg/apis/authentication.  We don't want the package dependency,
-// but you must not change the values.
-const (
-	// ImpersonateUserHeader is used to impersonate a particular user during an API server request
-	ImpersonateUserHeader = "Impersonate-User"
-
-	// ImpersonateGroupHeader is used to impersonate a particular group during an API server request.
-	// It can be repeated multiplied times for multiple groups.
-	ImpersonateGroupHeader = "Impersonate-Group"
-
-	// ImpersonateUserExtraHeaderPrefix is a prefix for a header used to impersonate an entry in the
-	// extra map[string][]string for user.Info.  The key for the `extra` map is suffix.
-	// The same key can be repeated multiple times to have multiple elements in the slice under a single key.
-	// For instance:
-	// Impersonate-Extra-Foo: one
-	// Impersonate-Extra-Foo: two
-	// results in extra["Foo"] = []string{"one", "two"}
-	ImpersonateUserExtraHeaderPrefix = "Impersonate-Extra-"
-)
+func (rt *basicAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.RoundTripper }
 
 const (
 	credentialsPath = "/tmp/credentials"
@@ -86,9 +67,9 @@ const (
 )
 
 var (
-	config    api.Config
-	client    api.Client
-	clientAPI v1.API
+	config api.Config
+	client api.Client
+	prom   v1.API
 )
 
 func init() {
@@ -96,15 +77,37 @@ func init() {
 
 	config = api.Config{
 		Address:      "https://prometheus.mlab-oti.measurementlab.net",
-		RoundTripper: NewBasicAuthRoundTripper(user, pass, http.DefaultTransport),
+		RoundTripper: newBasicAuthRoundTripper(user, pass, http.DefaultTransport),
 	}
 
-	client, _ = api.NewClient(config)
-	clientAPI = v1.NewAPI(client)
+	client, err := api.NewClient(config)
+	rtx.Must(err, "Unable to initialize a new client!")
+
+	prom = v1.NewAPI(client)
 }
 
-func getSwitches() (model.Vector, error) {
-	values, err := clientAPI.Query(context.Background(), switchQuery, time.Now())
+// getOfflineSites checks for offline sites (switches) in the last N minutes.
+// It returns a sitename -> Sample map.
+func getOfflineSites() (map[string]*model.Sample, error) {
+	offline := make(map[string]*model.Sample)
+
+	values, err := prom.Query(context.Background(), switchQuery, time.Now())
+	if err != nil {
+		return nil, err
+	}
+
+	for _, s := range values.(model.Vector) {
+		offline[string(s.Metric["site"])] = s
+	}
+
+	return offline, err
+}
+
+// getOfflineNodes checks for offline nodes in the last N minutes.
+// It returns a Vector of samples.
+func getOfflineNodes(minutes int) (model.Vector, error) {
+
+	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes, minutes, minutes), time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -112,112 +115,117 @@ func getSwitches() (model.Vector, error) {
 	return values.(model.Vector), err
 }
 
-func getStats(minutes int) (model.Vector, error) {
-	/// Takes two strings, representing the username and
-	/// password for the Prometheus API, and runs an
-	/// HTTP request against mlab-oti.
-
-	values, err := clientAPI.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes, minutes, minutes), time.Now())
-	if err != nil {
-		return nil, err
-	}
-
-	return values.(model.Vector), err
-}
-
+// Reads the Prometheus API credentials from the /tmp/credentials file.
+// It expects a two line file, with username on the first line and password
+// on the second. Returns a tuple of strings with the first item being the
+// username and second the password.
+//
+// TODO(roberto): get these from env.
 func getCredentials() (string, string) {
-	/// Reads the Prometheus API credentials from the /tmp/credentials
-	/// file. It expects a two line file, with username on the first line
-	/// and password on the second. Returns a tuple of strings with the
-	/// first item being the username and second the password.
-
-	/// TODO (ross) Figure out how to get credentials into the file
-	/// Best option is probably Travis secrets.
 	file, err := os.Open(credentialsPath)
-	if err != nil {
-		log.Fatal(err)
-	}
+	rtx.Must(err, "Cannot open credentials' file")
 	defer file.Close()
 
 	reader := bufio.NewReader(file)
 	username, err := reader.ReadBytes('\n')
-	if err != nil {
-		log.Fatal()
-	}
+	rtx.Must(err, "Cannot read username from "+credentialsPath)
+
 	password, err := reader.ReadBytes('\n')
-	if err != nil {
-		log.Fatal()
-	}
+	rtx.Must(err, "Cannot read password from"+credentialsPath)
 
 	return string(bytes.Trim(username, "\n")), string(bytes.Trim(password, "\n"))
 }
 
-func main() {
-	// First, check to see if there's an existing candidate history file
+// readCandidateHistory reads a JSON file containing a map of
+// string -> candidate. If the file cannot be read or deserialized, it returns
+// an empty map.
+func readCandidateHistory() map[string]candidate {
 	var candidateHistory map[string]candidate
 	file, err := ioutil.ReadFile(historyPath)
-	if err != nil {
-		// There is no existing candidate history file...
-		candidateHistory = make(map[string]candidate)
-	} else {
-		err = json.Unmarshal(file, &candidateHistory)
 
-		if err != nil {
-			panic("Cannot unmarshal " + historyPath)
-		}
+	if err != nil {
+		// There is no existing candidate history file -> return empty map.
+		return make(map[string]candidate)
 	}
+
+	err = json.Unmarshal(file, &candidateHistory)
+
+	if err != nil {
+		log.Println("Cannot unmarshal the candidates' history file - ignoring it")
+		log.Println(err)
+		return make(map[string]candidate)
+	}
+
+	return candidateHistory
+}
+
+func main() {
+	// First, check to see if there's an existing candidate history file
+
+	candidateHistory := readCandidateHistory()
+	ok := true
 
 	// Query for offline switches
-	offlineSites := make(map[string]bool)
-	switches, err := getSwitches()
-
-	for _, s := range switches {
-		offlineSites[string(s.Metric["site"])] = true
-	}
-
-	siteStats, _ := getStats(15)
-
-	var candidates []string
-	for _, value := range siteStats {
-		// Ignore machines in sites where the switch is offline.
-		site := string(value.Metric["site"])
-		if _, ok := offlineSites[site]; !ok {
-			candidates = append(candidates, string(value.Metric["machine"]))
-		} else {
-			println("Ignoring " + site + " as the switch is offline.")
-		}
-
-	}
-
-	fmt.Println(candidates)
-
-	var realCandidates []string
-	for _, site := range candidates {
-		thisCandidate, ok := candidateHistory[site]
-		if ok {
-			// This candidate has been down before.
-			// Check to see if the previous time was w/in the past 24 hours
-			if time.Now().Sub(thisCandidate.LastReboot) > 24*time.Hour {
-				// If previous incident was more than 24 hours ago,
-				// its still a candidate, so add it to the list
-				realCandidates = append(realCandidates, thisCandidate.Name)
-				// Update the candidate with the current time and update the map
-				thisCandidate.LastReboot = time.Now()
-				candidateHistory[site] = thisCandidate
-			}
-		} else {
-			// There's no candidate object in the map for this site
-			// so we have to create one and add it.
-			candidateHistory[site] = candidate{
-				Name:       site,
-				LastReboot: time.Now(),
-			}
-			realCandidates = append(realCandidates, site)
-		}
-	}
-	newCandidates, err := json.Marshal(candidateHistory)
+	sites, err := getOfflineSites()
 	if err != nil {
-		log.Fatal(err)
+		ok = false
+		log.Println("Unable to retrieve offline switches from Prometheus")
+		log.Println(err)
 	}
-	err = ioutil.WriteFile(historyPath, newCandidates, 0644)
+
+	nodes, err := getOfflineNodes(15)
+	if err != nil {
+		ok = false
+		log.Println("Unable to retrieve offline nodes from Prometheus")
+		log.Println(err)
+	}
+
+	if ok {
+		var candidates []string
+
+		for _, value := range nodes {
+			// Ignore machines in sites where the switch is offline.
+			site := string(value.Metric["site"])
+			if _, ok := sites[site]; !ok {
+				candidates = append(candidates, string(value.Metric["machine"]))
+			} else {
+				println("Ignoring " + site + " as the switch is offline.")
+			}
+
+		}
+
+		fmt.Println(candidates)
+
+		var realCandidates []string
+		for _, site := range candidates {
+			thisCandidate, ok := candidateHistory[site]
+			if ok {
+				// This candidate has been down before.
+				// Check to see if the previous time was w/in the past 24 hours
+				if time.Now().Sub(thisCandidate.LastReboot) > 24*time.Hour {
+					// If previous incident was more than 24 hours ago,
+					// its still a candidate, so add it to the list
+					realCandidates = append(realCandidates, thisCandidate.Name)
+					// Update the candidate with the current time and update the map
+					thisCandidate.LastReboot = time.Now()
+					candidateHistory[site] = thisCandidate
+				}
+			} else {
+				// There's no candidate object in the map for this site
+				// so we have to create one and add it.
+				candidateHistory[site] = candidate{
+					Name:       site,
+					LastReboot: time.Now(),
+				}
+				realCandidates = append(realCandidates, site)
+			}
+		}
+		newCandidates, err := json.Marshal(candidateHistory)
+		rtx.Must(err, "Cannot marshal the candidates history!")
+
+		err = ioutil.WriteFile(historyPath, newCandidates, 0644)
+		rtx.Must(err, "Cannot write the candidates history's JSON file!")
+	} else {
+		log.Println("Skipping as we could not retrieve data from Prometheus.")
+	}
 }
