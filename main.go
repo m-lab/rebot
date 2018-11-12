@@ -1,3 +1,8 @@
+/*
+The rebot tool identifies machines on the M-Lab infrastructure that are not
+reachable anymore and should be rebooted (according to various criteria) and
+attempts to reboot them through iDRAC.
+*/
 package main
 
 import (
