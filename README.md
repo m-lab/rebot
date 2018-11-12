@@ -5,7 +5,7 @@ Criteria for reboot candidates
 ---
 
 This is the list of criteria ReBot will check to determine if a machine needs
-to be rebooted. 
+to be rebooted.
 
 - machine is offline - port 806 down for the last 15m
 - machine is not lame-ducked - lame_duck_node is not 1
