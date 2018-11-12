@@ -71,7 +71,9 @@ const (
 				"site", "$1", "machine", ".+?\\.(.+?)\\..+")
 				unless on(machine) gmx_machine_maintenance == 1
 				unless on(site) gmx_site_maintenance == 1
-				unless on (machine) lame_duck_node == 1`
+				unless on (machine) lame_duck_node == 1
+				unless on (machine) count_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) < 14
+				unless on (machine) rate(inotify_extension_create_total{ext=".s2c_snaplog"}[%dm]) > 0`
 
 	// To determine if a switch is offline, pings are generally more reliable
 	// than SNMP scraping.
@@ -110,7 +112,7 @@ func getStats(minutes int) (model.Vector, error) {
 	/// password for the Prometheus API, and runs an
 	/// HTTP request against mlab-oti.
 
-	values, err := clientAPI.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
+	values, err := clientAPI.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes, minutes, minutes), time.Now())
 	if err != nil {
 		return nil, err
 	}
