@@ -181,7 +181,7 @@ func filterOfflineSites(sites map[string]*model.Sample, nodes model.Vector) []st
 		if _, ok := sites[site]; !ok {
 			candidates = append(candidates, string(value.Metric["machine"]))
 		} else {
-			println("Ignoring " + machine + " as the switch is offline.")
+			log.Println("Ignoring " + machine + " as the switch is offline.")
 		}
 	}
 
@@ -200,7 +200,7 @@ func filterRecent(nodes []string, candidateHistory map[string]candidate) []strin
 			if time.Now().Sub(candidate.LastReboot) > 24*time.Hour {
 				rebootList = append(rebootList, candidate.Name)
 			} else {
-				fmt.Println("Skipping " + node + " as it was recently rebooted.")
+				log.Println("Skipping " + node + " as it was recently rebooted.")
 			}
 		} else {
 			// New candidate - just add it to the list.
