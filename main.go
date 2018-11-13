@@ -51,6 +51,7 @@ func (rt *basicAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 func (rt *basicAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.RoundTripper }
 
 const (
+	defaultMins     = 15
 	credentialsPath = "/tmp/credentials"
 	historyPath     = "/tmp/candidateHistory.json"
 	nodeQuery       = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0,
@@ -200,7 +201,7 @@ func main() {
 	}
 
 	// Query for offline nodes
-	nodes, err := getOfflineNodes(15)
+	nodes, err := getOfflineNodes(defaultMins)
 	if err != nil {
 		ok = false
 		log.Println("Unable to retrieve offline nodes from Prometheus")
