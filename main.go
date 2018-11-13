@@ -116,7 +116,8 @@ func getOfflineNodes(minutes int) (model.Vector, error) {
 	return values.(model.Vector), err
 }
 
-// Reads the Prometheus API credentials from the /tmp/credentials file.
+// getCredentials reads the Prometheus API credentials from the
+// /tmp/credentials file.
 // It expects a two line file, with username on the first line and password
 // on the second. Returns a tuple of strings with the first item being the
 // username and second the password.
@@ -176,14 +177,57 @@ func filterOfflineSites(sites map[string]*model.Sample, nodes model.Vector) []st
 	for _, value := range nodes {
 		// Ignore machines in sites where the switch is offline.
 		site := string(value.Metric["site"])
+		machine := string(value.Metric["machine"])
 		if _, ok := sites[site]; !ok {
 			candidates = append(candidates, string(value.Metric["machine"]))
 		} else {
-			println("Ignoring " + site + " as the switch is offline.")
+			println("Ignoring " + machine + " as the switch is offline.")
 		}
 	}
 
 	return candidates
+}
+
+// filterRecent filters out nodes that were rebooted less than 24 hours ago.
+func filterRecent(nodes []string, candidateHistory map[string]candidate) []string {
+	var rebootList []string
+
+	for _, node := range nodes {
+		candidate, ok := candidateHistory[node]
+		if ok {
+			// This candidate has been down before.
+			// Check to see if the previous time was w/in the past 24 hours
+			if time.Now().Sub(candidate.LastReboot) > 24*time.Hour {
+				rebootList = append(rebootList, candidate.Name)
+			} else {
+				fmt.Println("Skipping " + node + " as it was recently rebooted.")
+			}
+		} else {
+			// New candidate - just add it to the list.
+			rebootList = append(rebootList, node)
+		}
+	}
+
+	return rebootList
+}
+
+// updateHistory updates the LastReboot field for all the candidates named in
+// the nodes slice. If a candidate did not previously exist, it creates a
+// new one.
+func updateHistory(nodes []string, history map[string]candidate) {
+	for _, node := range nodes {
+		el, ok := history[node]
+
+		if ok {
+			el.LastReboot = time.Now()
+			history[node] = el
+		} else {
+			history[node] = candidate{
+				Name:       node,
+				LastReboot: time.Now(),
+			}
+		}
+	}
 }
 
 func main() {
@@ -209,35 +253,12 @@ func main() {
 	}
 
 	if ok {
-		var offline = filterOfflineSites(sites, nodes)
+		offline := filterOfflineSites(sites, nodes)
+		toReboot := filterRecent(offline, candidateHistory)
 
-		fmt.Println(offline)
+		// TODO(roberto): actually try to reboot the nodes.
 
-		var rebootList []string
-		for _, site := range offline {
-			node, ok := candidateHistory[site]
-			if ok {
-				// This candidate has been down before.
-				// Check to see if the previous time was w/in the past 24 hours
-				if time.Now().Sub(node.LastReboot) > 24*time.Hour {
-					// If previous incident was more than 24 hours ago,
-					// its still a candidate, so add it to the list
-					rebootList = append(rebootList, node.Name)
-					// Update the candidate with the current time and update the map
-					node.LastReboot = time.Now()
-					candidateHistory[site] = node
-				}
-			} else {
-				// There's no candidate object in the map for this site
-				// so we have to create one and add it.
-				candidateHistory[site] = candidate{
-					Name:       site,
-					LastReboot: time.Now(),
-				}
-				rebootList = append(rebootList, site)
-			}
-		}
-
+		updateHistory(toReboot, candidateHistory)
 		writeCandidateHistory(candidateHistory)
 	} else {
 		log.Println("Skipping as we could not retrieve data from Prometheus.")
