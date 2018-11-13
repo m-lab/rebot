@@ -234,33 +234,21 @@ func main() {
 	// First, check to see if there's an existing candidate history file
 
 	candidateHistory := readCandidateHistory()
-	ok := true
 
 	// Query for offline switches
 	sites, err := getOfflineSites()
-	if err != nil {
-		ok = false
-		log.Println("Unable to retrieve offline switches from Prometheus")
-		log.Println(err)
-	}
+	rtx.Must(err, "Unable to retrieve offline switches from Prometheus")
 
 	// Query for offline nodes
 	nodes, err := getOfflineNodes(defaultMins)
-	if err != nil {
-		ok = false
-		log.Println("Unable to retrieve offline nodes from Prometheus")
-		log.Println(err)
-	}
+	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
 
-	if ok {
-		offline := filterOfflineSites(sites, nodes)
-		toReboot := filterRecent(offline, candidateHistory)
+	offline := filterOfflineSites(sites, nodes)
+	toReboot := filterRecent(offline, candidateHistory)
 
-		// TODO(roberto): actually try to reboot the nodes.
+	// TODO(roberto): actually try to reboot the nodes.
 
-		updateHistory(toReboot, candidateHistory)
-		writeCandidateHistory(candidateHistory)
-	} else {
-		log.Println("Skipping as we could not retrieve data from Prometheus.")
-	}
+	updateHistory(toReboot, candidateHistory)
+	writeCandidateHistory(candidateHistory)
+
 }
