@@ -159,6 +159,32 @@ func readCandidateHistory() map[string]candidate {
 	return candidateHistory
 }
 
+// writeCandidateHistory serializes a string -> candidate map to a JSON file.
+// If the map cannot be serialized or the file cannot be written, it exits.
+func writeCandidateHistory(candidateHistory map[string]candidate) {
+	newCandidates, err := json.Marshal(candidateHistory)
+	rtx.Must(err, "Cannot marshal the candidates history!")
+
+	err = ioutil.WriteFile(historyPath, newCandidates, 0644)
+	rtx.Must(err, "Cannot write the candidates history's JSON file!")
+}
+
+func filterOfflineSites(sites map[string]*model.Sample, nodes model.Vector) []string {
+	var candidates []string
+
+	for _, value := range nodes {
+		// Ignore machines in sites where the switch is offline.
+		site := string(value.Metric["site"])
+		if _, ok := sites[site]; !ok {
+			candidates = append(candidates, string(value.Metric["machine"]))
+		} else {
+			println("Ignoring " + site + " as the switch is offline.")
+		}
+	}
+
+	return candidates
+}
+
 func main() {
 	// First, check to see if there's an existing candidate history file
 
@@ -173,6 +199,7 @@ func main() {
 		log.Println(err)
 	}
 
+	// Query for offline nodes
 	nodes, err := getOfflineNodes(15)
 	if err != nil {
 		ok = false
@@ -181,34 +208,23 @@ func main() {
 	}
 
 	if ok {
-		var candidates []string
+		var offline = filterOfflineSites(sites, nodes)
 
-		for _, value := range nodes {
-			// Ignore machines in sites where the switch is offline.
-			site := string(value.Metric["site"])
-			if _, ok := sites[site]; !ok {
-				candidates = append(candidates, string(value.Metric["machine"]))
-			} else {
-				println("Ignoring " + site + " as the switch is offline.")
-			}
+		fmt.Println(offline)
 
-		}
-
-		fmt.Println(candidates)
-
-		var realCandidates []string
-		for _, site := range candidates {
-			thisCandidate, ok := candidateHistory[site]
+		var rebootList []string
+		for _, site := range offline {
+			node, ok := candidateHistory[site]
 			if ok {
 				// This candidate has been down before.
 				// Check to see if the previous time was w/in the past 24 hours
-				if time.Now().Sub(thisCandidate.LastReboot) > 24*time.Hour {
+				if time.Now().Sub(node.LastReboot) > 24*time.Hour {
 					// If previous incident was more than 24 hours ago,
 					// its still a candidate, so add it to the list
-					realCandidates = append(realCandidates, thisCandidate.Name)
+					rebootList = append(rebootList, node.Name)
 					// Update the candidate with the current time and update the map
-					thisCandidate.LastReboot = time.Now()
-					candidateHistory[site] = thisCandidate
+					node.LastReboot = time.Now()
+					candidateHistory[site] = node
 				}
 			} else {
 				// There's no candidate object in the map for this site
@@ -217,14 +233,11 @@ func main() {
 					Name:       site,
 					LastReboot: time.Now(),
 				}
-				realCandidates = append(realCandidates, site)
+				rebootList = append(rebootList, site)
 			}
 		}
-		newCandidates, err := json.Marshal(candidateHistory)
-		rtx.Must(err, "Cannot marshal the candidates history!")
 
-		err = ioutil.WriteFile(historyPath, newCandidates, 0644)
-		rtx.Must(err, "Cannot write the candidates history's JSON file!")
+		writeCandidateHistory(candidateHistory)
 	} else {
 		log.Println("Skipping as we could not retrieve data from Prometheus.")
 	}
