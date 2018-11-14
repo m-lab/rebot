@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"testing"
@@ -124,21 +125,29 @@ func Test_getOfflineSites(t *testing.T) {
 func Test_getOfflineNodes(t *testing.T) {
 	tests := []struct {
 		name    string
+		prom    promClient
 		minutes int
 		want    model.Vector
 		wantErr bool
 	}{
 		{
 			name:    "success",
+			prom:    fakeProm,
 			minutes: testMins,
 			want: model.Vector{
 				fakeOfflineNode,
 			},
 		},
+		{
+			name:    "error",
+			prom:    fakePromErr,
+			minutes: testMins,
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getOfflineNodes(fakeProm, tt.minutes)
+			got, err := getOfflineNodes(tt.prom, tt.minutes)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getOfflineNodes() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -431,38 +440,20 @@ func Test_updateHistory(t *testing.T) {
 }
 
 func Test_basicAuthRoundTripper_RoundTrip(t *testing.T) {
-	type fields struct {
-		username     string
-		password     string
-		RoundTripper http.RoundTripper
-	}
-	type args struct {
-		req *http.Request
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *http.Response
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rt := &basicAuthRoundTripper{
-				username:     tt.fields.username,
-				password:     tt.fields.password,
-				RoundTripper: tt.fields.RoundTripper,
-			}
-			got, err := rt.RoundTrip(tt.args.req)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("basicAuthRoundTripper.RoundTrip() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("basicAuthRoundTripper.RoundTrip() = %v, want %v", got, tt.want)
-			}
-		})
-	}
+	setupCredentials()
+	defer removeFiles(testCredentialsPath)
+
+	initPrometheusClient()
+	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
+		user, pass, ok := req.BasicAuth()
+		if !ok {
+			t.Errorf("Missing HTTP basic authentication.")
+		}
+
+		if user != "testuser" || pass != "testpass" {
+			t.Errorf("Unexpected username/password.")
+		}
+	}))
+
+	defer server.Close()
 }

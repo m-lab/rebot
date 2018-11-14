@@ -34,27 +34,6 @@ type candidate struct {
 	LastReboot time.Time
 }
 
-type basicAuthRoundTripper struct {
-	username string
-	password string
-	http.RoundTripper
-}
-
-func newBasicAuthRoundTripper(username, password string, rt http.RoundTripper) http.RoundTripper {
-	return &basicAuthRoundTripper{username, password, rt}
-}
-
-func (rt *basicAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if len(req.Header.Get("Authorization")) != 0 {
-		return rt.RoundTripper.RoundTrip(req)
-	}
-
-	req.SetBasicAuth(rt.username, rt.password)
-	return rt.RoundTripper.RoundTrip(req)
-}
-
-func (rt *basicAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.RoundTripper }
-
 const (
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
@@ -233,12 +212,12 @@ func updateHistory(nodes []string, history map[string]candidate) {
 // authentication. If we are running main() in a test, prom will be set
 // already, thus we won't replace it.
 func initPrometheusClient() {
-	if prom != nil {
-		user, pass := getCredentials(credentialsPath)
+	if prom == nil {
+		//user, pass := getCredentials(credentialsPath)
 
 		config = api.Config{
-			Address:      "https://prometheus.mlab-oti.measurementlab.net",
-			RoundTripper: newBasicAuthRoundTripper(user, pass, http.DefaultTransport),
+			Address:      "https://mlab:YOztKFSKnRMz2GN1qFPueAku9WhmDYV2@prometheus.mlab-oti.measurementlab.net",
+			RoundTripper: http.DefaultTransport,
 		}
 
 		client, err := api.NewClient(config)
@@ -249,6 +228,8 @@ func initPrometheusClient() {
 }
 
 func main() {
+	initPrometheusClient()
+
 	// First, check to see if there's an existing candidate history file
 	candidateHistory := readCandidateHistory(historyPath)
 
