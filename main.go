@@ -89,7 +89,7 @@ func init() {
 
 // getOfflineSites checks for offline sites (switches) in the last N minutes.
 // It returns a sitename -> Sample map.
-func getOfflineSites() (map[string]*model.Sample, error) {
+func getOfflineSites(prom promClient) (map[string]*model.Sample, error) {
 	offline := make(map[string]*model.Sample)
 
 	values, err := prom.Query(context.Background(), switchQuery, time.Now())
@@ -97,6 +97,7 @@ func getOfflineSites() (map[string]*model.Sample, error) {
 		return nil, err
 	}
 
+	fmt.Println(values)
 	for _, s := range values.(model.Vector) {
 		offline[string(s.Metric["site"])] = s
 	}
@@ -104,9 +105,13 @@ func getOfflineSites() (map[string]*model.Sample, error) {
 	return offline, err
 }
 
+type promClient interface {
+	Query(context.Context, string, time.Time) (model.Value, error)
+}
+
 // getOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
-func getOfflineNodes(minutes int) (model.Vector, error) {
+func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
 
 	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes, minutes, minutes), time.Now())
 	if err != nil {
@@ -232,15 +237,14 @@ func updateHistory(nodes []string, history map[string]candidate) {
 
 func main() {
 	// First, check to see if there's an existing candidate history file
-
 	candidateHistory := readCandidateHistory()
 
 	// Query for offline switches
-	sites, err := getOfflineSites()
+	sites, err := getOfflineSites(prom)
 	rtx.Must(err, "Unable to retrieve offline switches from Prometheus")
 
 	// Query for offline nodes
-	nodes, err := getOfflineNodes(defaultMins)
+	nodes, err := getOfflineNodes(prom, defaultMins)
 	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
 
 	offline := filterOfflineSites(sites, nodes)
