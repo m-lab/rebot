@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"reflect"
 	"testing"
@@ -26,6 +27,7 @@ const (
 
 var (
 	fakeProm          *PrometheusMockClient
+	fakePromErr       *PrometheusMockClient
 	fakeOfflineSwitch *model.Sample
 	fakeOfflineNode   *model.Sample
 
@@ -51,6 +53,10 @@ var (
 
 func init() {
 	fakeProm = NewPrometheusMockClient()
+	// This client does not have any registered query, thus it always
+	// returns an error.
+	fakePromErr = NewPrometheusMockClient()
+
 	now := model.Time(time.Now().Unix())
 
 	fakeOfflineSwitch = CreateSample(map[string]string{
@@ -84,6 +90,7 @@ func init() {
 func Test_getOfflineSites(t *testing.T) {
 	tests := []struct {
 		name    string
+		prom    promClient
 		want    map[string]*model.Sample
 		wantErr bool
 	}{
@@ -92,11 +99,17 @@ func Test_getOfflineSites(t *testing.T) {
 			want: map[string]*model.Sample{
 				"iad0t": fakeOfflineSwitch,
 			},
+			prom: fakeProm,
+		},
+		{
+			name:    "error",
+			prom:    fakePromErr,
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getOfflineSites(fakeProm)
+			got, err := getOfflineSites(tt.prom)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getOfflineSites() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -345,6 +358,111 @@ func Test_main(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			main()
+		})
+	}
+}
+
+func Test_initPrometheusClient(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		{
+			name: "success",
+		},
+	}
+
+	setupCredentials()
+	defer removeFiles(testCredentialsPath)
+
+	credentialsPath = testCredentialsPath
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initPrometheusClient()
+		})
+	}
+}
+
+func cloneHistory(h map[string]candidate) map[string]candidate {
+	newHistory := map[string]candidate{}
+	for k, v := range h {
+		newHistory[k] = v
+	}
+
+	return newHistory
+}
+func Test_updateHistory(t *testing.T) {
+	nodes := []string{
+		"test",
+		"test2",
+		"iad0t",
+		"iad1t",
+	}
+
+	tests := []struct {
+		name    string
+		nodes   []string
+		history map[string]candidate
+	}{
+		{
+			name:    "success",
+			nodes:   nodes,
+			history: cloneHistory(history),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			updateHistory(tt.nodes, tt.history)
+
+			// Check that LastReboot is within the last minute for nodes
+			// in the nodes slice.
+			for _, node := range nodes {
+				candidate, ok := tt.history[node]
+				if !ok {
+					t.Errorf("%v missing in the history map.", node)
+				}
+
+				if !candidate.LastReboot.After(time.Now().Add(-1 * time.Minute)) {
+					t.Errorf("updateHistory() did not update LastReboot for node %v.", candidate.Name)
+				}
+
+			}
+		})
+	}
+}
+
+func Test_basicAuthRoundTripper_RoundTrip(t *testing.T) {
+	type fields struct {
+		username     string
+		password     string
+		RoundTripper http.RoundTripper
+	}
+	type args struct {
+		req *http.Request
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    *http.Response
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rt := &basicAuthRoundTripper{
+				username:     tt.fields.username,
+				password:     tt.fields.password,
+				RoundTripper: tt.fields.RoundTripper,
+			}
+			got, err := rt.RoundTrip(tt.args.req)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("basicAuthRoundTripper.RoundTrip() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("basicAuthRoundTripper.RoundTrip() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }
