@@ -56,10 +56,10 @@ func (rt *basicAuthRoundTripper) RoundTrip(req *http.Request) (*http.Response, e
 func (rt *basicAuthRoundTripper) WrappedRoundTripper() http.RoundTripper { return rt.RoundTripper }
 
 const (
-	defaultMins     = 15
-	credentialsPath = "/tmp/credentials"
-	historyPath     = "/tmp/candidateHistory.json"
-	nodeQuery       = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0,
+	defaultMins            = 15
+	defaultCredentialsPath = "/tmp/credentials"
+	defaultHistoryPath     = "/tmp/candidateHistory.json"
+	nodeQuery              = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0,
 				"site", "$1", "machine", ".+?\\.(.+?)\\..+")
 				unless on(machine) gmx_machine_maintenance == 1
 				unless on(site) gmx_site_maintenance == 1
@@ -75,21 +75,15 @@ const (
 var (
 	config api.Config
 	client api.Client
-	prom   v1.API
+	prom   promClient
+
+	historyPath     string
+	credentialsPath string
 )
 
 func init() {
-	user, pass := getCredentials(credentialsPath)
-
-	config = api.Config{
-		Address:      "https://prometheus.mlab-oti.measurementlab.net",
-		RoundTripper: newBasicAuthRoundTripper(user, pass, http.DefaultTransport),
-	}
-
-	client, err := api.NewClient(config)
-	rtx.Must(err, "Unable to initialize a new client!")
-
-	prom = v1.NewAPI(client)
+	historyPath = defaultHistoryPath
+	credentialsPath = defaultCredentialsPath
 }
 
 // getOfflineSites checks for offline sites (switches) in the last N minutes.
@@ -232,6 +226,25 @@ func updateHistory(nodes []string, history map[string]candidate) {
 				LastReboot: time.Now(),
 			}
 		}
+	}
+}
+
+// initPrometheusClient initializes a Prometheus client with HTTP basic
+// authentication. If we are running main() in a test, prom will be set
+// already, thus we won't replace it.
+func initPrometheusClient() {
+	if prom != nil {
+		user, pass := getCredentials(credentialsPath)
+
+		config = api.Config{
+			Address:      "https://prometheus.mlab-oti.measurementlab.net",
+			RoundTripper: newBasicAuthRoundTripper(user, pass, http.DefaultTransport),
+		}
+
+		client, err := api.NewClient(config)
+		rtx.Must(err, "Unable to initialize a new client!")
+
+		prom = v1.NewAPI(client)
 	}
 }
 

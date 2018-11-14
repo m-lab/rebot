@@ -19,10 +19,17 @@ import (
 	"github.com/prometheus/common/model"
 )
 
+const (
+	testCredentialsPath = "credentials"
+	testHistoryPath     = "history"
+)
+
 var (
 	fakeProm          *PrometheusMockClient
 	fakeOfflineSwitch *model.Sample
 	fakeOfflineNode   *model.Sample
+
+	offlineNodes model.Vector
 
 	testMins = 15
 
@@ -30,6 +37,14 @@ var (
 		"test": candidate{
 			Name:       "test",
 			LastReboot: time.Now(),
+		},
+		"iad0t": candidate{
+			Name:       "iad0t",
+			LastReboot: time.Now().Add(-25 * time.Hour),
+		},
+		"iad1t": candidate{
+			Name:       "iad1t",
+			LastReboot: time.Now().Add(-23 * time.Hour),
 		},
 	}
 )
@@ -50,20 +65,20 @@ func init() {
 	}
 
 	fakeOfflineNode = CreateSample(map[string]string{
-		"instance": "mlab1.lba01.measurement-lab.org:806",
+		"instance": "mlab1.iad0t.measurement-lab.org:806",
 		"job":      "blackbox-targets",
-		"machine":  "mlab1.lba01.measurement-lab.org",
+		"machine":  "mlab1.iad0t.measurement-lab.org",
 		"module":   "ssh_v4_online",
 		"service":  "ssh806",
-		"site":     "lba01",
+		"site":     "iad0t",
 	}, 0, now)
 
-	offlineNodes := model.Vector{
+	offlineNodes = model.Vector{
 		fakeOfflineNode,
 	}
 
-	fakeProm.Register(switchQuery, offlineSwitches)
-	fakeProm.Register(fmt.Sprintf(nodeQuery, testMins, testMins, testMins), offlineNodes)
+	fakeProm.Register(switchQuery, offlineSwitches, nil)
+	fakeProm.Register(fmt.Sprintf(nodeQuery, testMins, testMins, testMins), offlineNodes, nil)
 }
 
 func Test_getOfflineSites(t *testing.T) {
@@ -124,14 +139,14 @@ func Test_getOfflineNodes(t *testing.T) {
 
 func setupCredentials() {
 	cred := []byte("testuser\ntestpass\n")
-	err := ioutil.WriteFile("credentials", cred, 0644)
+	err := ioutil.WriteFile(testCredentialsPath, cred, 0644)
 	if err != nil {
 		panic(err)
 	}
 }
 
 func teardownCredentials() {
-	err := os.Remove("credentials")
+	err := os.Remove(testCredentialsPath)
 	if err != nil {
 		panic(err)
 	}
@@ -146,12 +161,13 @@ func Test_getCredentials(t *testing.T) {
 	}{
 		{
 			name:  "success",
-			path:  "credentials",
+			path:  testCredentialsPath,
 			want:  "testuser",
 			want1: "testpass",
 		},
 	}
 	setupCredentials()
+	defer teardownCredentials()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, got1 := getCredentials(tt.path)
@@ -163,14 +179,13 @@ func Test_getCredentials(t *testing.T) {
 			}
 		})
 	}
-	teardownCredentials()
 }
 
 func setupCandidateHistory() {
 	json, err := json.Marshal(history)
 	rtx.Must(err, "Cannot marshal the candidates history!")
 
-	err = ioutil.WriteFile("history", json, 0644)
+	err = ioutil.WriteFile(testHistoryPath, json, 0644)
 	rtx.Must(err, "Cannot write the candidates history's JSON file!")
 
 	err = ioutil.WriteFile("invalidhistory", []byte("notjson"), 0644)
@@ -193,7 +208,7 @@ func Test_readCandidateHistory(t *testing.T) {
 	}{
 		{
 			name: "success",
-			path: "history",
+			path: testHistoryPath,
 			want: history,
 		},
 		{
@@ -209,6 +224,7 @@ func Test_readCandidateHistory(t *testing.T) {
 	}
 
 	setupCandidateHistory()
+	defer removeFiles(testHistoryPath, "invalidhistory")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := readCandidateHistory(tt.path)
@@ -222,7 +238,6 @@ func Test_readCandidateHistory(t *testing.T) {
 			}
 		})
 	}
-	removeFiles("history", "invalidhistory")
 }
 
 func Test_writeCandidateHistory(t *testing.T) {
@@ -233,15 +248,103 @@ func Test_writeCandidateHistory(t *testing.T) {
 	}{
 		{
 			name:             "success",
-			path:             "history",
+			path:             testHistoryPath,
 			candidateHistory: history,
 		},
 	}
+	defer removeFiles(testHistoryPath)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			writeCandidateHistory(tt.path, tt.candidateHistory)
 		})
 	}
+}
 
-	removeFiles("history")
+func Test_filterOfflineSites(t *testing.T) {
+	tests := []struct {
+		name  string
+		sites map[string]*model.Sample
+		nodes model.Vector
+		want  []string
+	}{
+		{
+			name: "success",
+			sites: map[string]*model.Sample{
+				"iad0t": fakeOfflineSwitch,
+			},
+			nodes: offlineNodes,
+			want:  []string{},
+		},
+		{
+			name: "no changes",
+			sites: map[string]*model.Sample{
+				"test": fakeOfflineSwitch,
+			},
+			nodes: offlineNodes,
+			want:  []string{"mlab1.iad0t.measurement-lab.org"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := filterOfflineSites(tt.sites, tt.nodes); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("filterOfflineSites() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_filterRecent(t *testing.T) {
+	nodes := []string{
+		"test",
+		"test2",
+		"iad0t",
+		"iad1t",
+	}
+	tests := []struct {
+		name             string
+		nodes            []string
+		candidateHistory map[string]candidate
+		want             []string
+	}{
+		{
+			name:             "success",
+			nodes:            nodes,
+			candidateHistory: history,
+			want: []string{
+				"test2",
+				"iad0t",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := filterRecent(tt.nodes, tt.candidateHistory); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("filterRecent() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_main(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		{
+			name: "success",
+		},
+	}
+
+	setupCandidateHistory()
+	setupCredentials()
+	defer removeFiles(testHistoryPath, testCredentialsPath, "invalidhistory")
+
+	prom = fakeProm
+	historyPath = testHistoryPath
+	credentialsPath = testCredentialsPath
+	fmt.Println(switchQuery)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			main()
+		})
+	}
 }

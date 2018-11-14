@@ -12,19 +12,27 @@ import (
 // configurable set of queries. New queries/responses can be added by calling
 // Register(string, model.Value).
 type PrometheusMockClient struct {
-	responses map[string]model.Value
+	responses map[string]response
+}
+
+type response struct {
+	value model.Value
+	err   error
 }
 
 // NewPrometheusMockClient creates a mock client to test Prometheus queries.
 func NewPrometheusMockClient() *PrometheusMockClient {
 	var p PrometheusMockClient
-	p.responses = make(map[string]model.Value)
+	p.responses = make(map[string]response)
 	return &p
 }
 
 // Register maps a query to the expected model.Value that must be returned.
-func (p *PrometheusMockClient) Register(q string, resp model.Value) {
-	p.responses[q] = resp
+func (p *PrometheusMockClient) Register(q string, resp model.Value, err error) {
+	p.responses[q] = response{
+		value: resp,
+		err:   err,
+	}
 }
 
 // CreateSample returns a reference to a new model.Sample having labels, value
@@ -49,8 +57,8 @@ func (p PrometheusMockClient) Query(ctx context.Context, q string, t time.Time) 
 	resp, ok := p.responses[q]
 
 	if ok {
-		return resp, nil
+		return resp.value, resp.err
 	}
 
-	return model.Value(model.Vector{}), errors.New("Unknown query: " + q)
+	return nil, errors.New("Undefined query: " + q)
 }
