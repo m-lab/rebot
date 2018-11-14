@@ -23,6 +23,11 @@ import (
 	"github.com/prometheus/common/model"
 )
 
+// Prometheus HTTP client's interface
+type promClient interface {
+	Query(context.Context, string, time.Time) (model.Value, error)
+}
+
 /// Struct to hold history of a given service's outages
 type candidate struct {
 	Name       string
@@ -74,7 +79,7 @@ var (
 )
 
 func init() {
-	user, pass := getCredentials()
+	user, pass := getCredentials(credentialsPath)
 
 	config = api.Config{
 		Address:      "https://prometheus.mlab-oti.measurementlab.net",
@@ -97,16 +102,11 @@ func getOfflineSites(prom promClient) (map[string]*model.Sample, error) {
 		return nil, err
 	}
 
-	fmt.Println(values)
 	for _, s := range values.(model.Vector) {
 		offline[string(s.Metric["site"])] = s
 	}
 
 	return offline, err
-}
-
-type promClient interface {
-	Query(context.Context, string, time.Time) (model.Value, error)
 }
 
 // getOfflineNodes checks for offline nodes in the last N minutes.
@@ -128,8 +128,8 @@ func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
 // username and second the password.
 //
 // TODO(roberto): get these from env.
-func getCredentials() (string, string) {
-	file, err := os.Open(credentialsPath)
+func getCredentials(path string) (string, string) {
+	file, err := os.Open(path)
 	rtx.Must(err, "Cannot open credentials' file")
 	defer file.Close()
 
@@ -146,9 +146,9 @@ func getCredentials() (string, string) {
 // readCandidateHistory reads a JSON file containing a map of
 // string -> candidate. If the file cannot be read or deserialized, it returns
 // an empty map.
-func readCandidateHistory() map[string]candidate {
+func readCandidateHistory(path string) map[string]candidate {
 	var candidateHistory map[string]candidate
-	file, err := ioutil.ReadFile(historyPath)
+	file, err := ioutil.ReadFile(path)
 
 	if err != nil {
 		// There is no existing candidate history file -> return empty map.
@@ -168,11 +168,11 @@ func readCandidateHistory() map[string]candidate {
 
 // writeCandidateHistory serializes a string -> candidate map to a JSON file.
 // If the map cannot be serialized or the file cannot be written, it exits.
-func writeCandidateHistory(candidateHistory map[string]candidate) {
+func writeCandidateHistory(path string, candidateHistory map[string]candidate) {
 	newCandidates, err := json.Marshal(candidateHistory)
 	rtx.Must(err, "Cannot marshal the candidates history!")
 
-	err = ioutil.WriteFile(historyPath, newCandidates, 0644)
+	err = ioutil.WriteFile(path, newCandidates, 0644)
 	rtx.Must(err, "Cannot write the candidates history's JSON file!")
 }
 
@@ -237,7 +237,7 @@ func updateHistory(nodes []string, history map[string]candidate) {
 
 func main() {
 	// First, check to see if there's an existing candidate history file
-	candidateHistory := readCandidateHistory()
+	candidateHistory := readCandidateHistory(historyPath)
 
 	// Query for offline switches
 	sites, err := getOfflineSites(prom)
@@ -245,6 +245,7 @@ func main() {
 
 	// Query for offline nodes
 	nodes, err := getOfflineNodes(prom, defaultMins)
+	fmt.Println(nodes)
 	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
 
 	offline := filterOfflineSites(sites, nodes)
@@ -253,6 +254,6 @@ func main() {
 	// TODO(roberto): actually try to reboot the nodes.
 
 	updateHistory(toReboot, candidateHistory)
-	writeCandidateHistory(candidateHistory)
+	writeCandidateHistory(historyPath, candidateHistory)
 
 }
