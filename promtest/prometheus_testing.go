@@ -1,4 +1,6 @@
-package main
+// Package promtest provides a mock implementation of a Prometheus HTTP client
+// for testing purposes and some utility functions.
+package promtest
 
 import (
 	"context"

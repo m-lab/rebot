@@ -27,7 +27,7 @@ type promClient interface {
 	Query(context.Context, string, time.Time) (model.Value, error)
 }
 
-/// Struct to hold history of a given service's outages
+// Struct to hold history of a given service's outages
 type candidate struct {
 	Name       string
 	LastReboot time.Time
@@ -94,7 +94,7 @@ func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
 }
 
 // getCredentials reads the Prometheus API credentials from the
-// /tmp/credentials file.
+// provided path.
 // It expects a two line file, with username on the first line and password
 // on the second. Returns a tuple of strings with the first item being the
 // username and second the password.
@@ -215,7 +215,7 @@ func initPrometheusClient() {
 		user, pass := getCredentials(credentialsPath)
 
 		config = api.Config{
-			Address:      "https://" + user + ":" + pass +"@prometheus.mlab-oti.measurementlab.net",
+			Address: "https://" + user + ":" + pass + "@prometheus.mlab-oti.measurementlab.net",
 		}
 
 		client, err := api.NewClient(config)

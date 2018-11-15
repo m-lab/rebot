@@ -1,8 +1,3 @@
-/*
-The rebot tool identifies machines on the M-Lab infrastructure that are not
-reachable anymore and should be rebooted (according to various criteria) and
-attempts to reboot them through iDRAC.
-*/
 package main
 
 import (
@@ -18,6 +13,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/rebot/promtest"
 	"github.com/prometheus/common/model"
 )
 
@@ -27,8 +23,8 @@ const (
 )
 
 var (
-	fakeProm          *PrometheusMockClient
-	fakePromErr       *PrometheusMockClient
+	fakeProm          *promtest.PrometheusMockClient
+	fakePromErr       *promtest.PrometheusMockClient
 	fakeOfflineSwitch *model.Sample
 	fakeOfflineNode   *model.Sample
 
@@ -37,30 +33,30 @@ var (
 	testMins = 15
 
 	history = map[string]candidate{
-		"test": candidate{
-			Name:       "test",
+		"mlab1.iad0t.measurement-lab.org": candidate{
+			Name:       "mlab1.iad0t.measurement-lab.org",
 			LastReboot: time.Now(),
 		},
-		"iad0t": candidate{
-			Name:       "iad0t",
+		"mlab2.iad0t.measurement-lab.org": candidate{
+			Name:       "mlab2.iad0t.measurement-lab.org",
 			LastReboot: time.Now().Add(-25 * time.Hour),
 		},
-		"iad1t": candidate{
-			Name:       "iad1t",
+		"mlab1.iad1t.measurement-lab.org": candidate{
+			Name:       "mlab1.iad1t.measurement-lab.org",
 			LastReboot: time.Now().Add(-23 * time.Hour),
 		},
 	}
 )
 
 func init() {
-	fakeProm = NewPrometheusMockClient()
+	fakeProm = promtest.NewPrometheusMockClient()
 	// This client does not have any registered query, thus it always
 	// returns an error.
-	fakePromErr = NewPrometheusMockClient()
+	fakePromErr = promtest.NewPrometheusMockClient()
 
 	now := model.Time(time.Now().Unix())
 
-	fakeOfflineSwitch = CreateSample(map[string]string{
+	fakeOfflineSwitch = promtest.CreateSample(map[string]string{
 		"instance": "s1.iad0t.measurement-lab.org",
 		"job":      "blackbox-targets",
 		"module":   "icmp",
@@ -71,7 +67,7 @@ func init() {
 		fakeOfflineSwitch,
 	}
 
-	fakeOfflineNode = CreateSample(map[string]string{
+	fakeOfflineNode = promtest.CreateSample(map[string]string{
 		"instance": "mlab1.iad0t.measurement-lab.org:806",
 		"job":      "blackbox-targets",
 		"machine":  "mlab1.iad0t.measurement-lab.org",
@@ -176,16 +172,16 @@ func teardownCredentials() {
 
 func Test_getCredentials(t *testing.T) {
 	tests := []struct {
-		name  string
-		path  string
-		want  string
-		want1 string
+		name     string
+		path     string
+		wantUser string
+		wantPass string
 	}{
 		{
-			name:  "success",
-			path:  testCredentialsPath,
-			want:  "testuser",
-			want1: "testpass",
+			name:     "success",
+			path:     testCredentialsPath,
+			wantUser: "testuser",
+			wantPass: "testpass",
 		},
 	}
 	setupCredentials()
@@ -193,11 +189,11 @@ func Test_getCredentials(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, got1 := getCredentials(tt.path)
-			if got != tt.want {
-				t.Errorf("getCredentials() got = %v, want %v", got, tt.want)
+			if got != tt.wantUser {
+				t.Errorf("getCredentials() got = %v, want %v", got, tt.wantUser)
 			}
-			if got1 != tt.want1 {
-				t.Errorf("getCredentials() got1 = %v, want %v", got1, tt.want1)
+			if got1 != tt.wantPass {
+				t.Errorf("getCredentials() got1 = %v, want %v", got1, tt.wantPass)
 			}
 		})
 	}
@@ -283,6 +279,7 @@ func Test_writeCandidateHistory(t *testing.T) {
 }
 
 func Test_filterOfflineSites(t *testing.T) {
+
 	tests := []struct {
 		name  string
 		sites map[string]*model.Sample
@@ -290,7 +287,7 @@ func Test_filterOfflineSites(t *testing.T) {
 		want  []string
 	}{
 		{
-			name: "success",
+			name: "success-filtered-node-when-site-offline",
 			sites: map[string]*model.Sample{
 				"iad0t": fakeOfflineSwitch,
 			},
@@ -298,12 +295,21 @@ func Test_filterOfflineSites(t *testing.T) {
 			want:  []string{},
 		},
 		{
-			name: "no changes",
+			name: "success-offline-node-returned",
 			sites: map[string]*model.Sample{
-				"test": fakeOfflineSwitch,
+				"iad0t": fakeOfflineSwitch,
 			},
-			nodes: offlineNodes,
-			want:  []string{"mlab1.iad0t.measurement-lab.org"},
+			nodes: model.Vector{
+				promtest.CreateSample(map[string]string{
+					"instance": "mlab1.iad1t.measurement-lab.org:806",
+					"job":      "blackbox-targets",
+					"machine":  "mlab1.iad1t.measurement-lab.org",
+					"module":   "ssh_v4_online",
+					"service":  "ssh806",
+					"site":     "iad1t",
+				}, 0, model.Time(time.Now().Unix())),
+			},
+			want: []string{"mlab1.iad1t.measurement-lab.org"},
 		},
 	}
 	for _, tt := range tests {
@@ -316,11 +322,21 @@ func Test_filterOfflineSites(t *testing.T) {
 }
 
 func Test_filterRecent(t *testing.T) {
-	nodes := []string{
-		"test",
-		"test2",
-		"iad0t",
-		"iad1t",
+
+	// Nodes where no previous reboot was present
+	noHistory := []string{
+		"mlab2.iad1t.measurement-lab.org",
+	}
+
+	// Nodes where LastReboot is before 24hrs ago.
+	rebootable := []string{
+		"mlab2.iad0t.measurement-lab.org",
+	}
+
+	// Nodes where LastReboot is within the last 24hrs.
+	notRebootable := []string{
+		"mlab1.iad0t.measurement-lab.org",
+		"mlab1.iad1t.measurement-lab.org",
 	}
 	tests := []struct {
 		name             string
@@ -329,18 +345,31 @@ func Test_filterRecent(t *testing.T) {
 		want             []string
 	}{
 		{
-			name:             "success",
-			nodes:            nodes,
+			name:             "success-no-history",
+			nodes:            noHistory,
 			candidateHistory: history,
 			want: []string{
-				"test2",
-				"iad0t",
+				"mlab2.iad1t.measurement-lab.org",
 			},
+		},
+		{
+			name:             "success-rebootable",
+			nodes:            rebootable,
+			candidateHistory: history,
+			want: []string{
+				"mlab2.iad0t.measurement-lab.org",
+			},
+		},
+		{
+			name:             "success-not-rebootable",
+			nodes:            notRebootable,
+			candidateHistory: history,
+			want:             []string{},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := filterRecent(tt.nodes, tt.candidateHistory); !reflect.DeepEqual(got, tt.want) {
+			if got := filterRecent(tt.nodes, tt.candidateHistory); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("filterRecent() = %v, want %v", got, tt.want)
 			}
 		})
