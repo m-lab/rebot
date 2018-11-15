@@ -10,6 +10,16 @@ import (
 )
 
 func TestPrometheusMockClient_Query(t *testing.T) {
+
+	testQuery := "sum_over_time(probe_success{instance=~\"s1.*\", module=\"icmp\"}[15m]) == 0"
+	testResponse := model.Vector{
+		CreateSample(map[string]string{
+			"instance": "s1.iad0t.measurement-lab.org",
+			"job":      "blackbox-targets",
+			"module":   "icmp",
+			"site":     "iad0t",
+		}, 0, model.Time(time.Now().Unix())),
+	}
 	type fields struct {
 		responses map[string]response
 	}
@@ -19,17 +29,30 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 		t   time.Time
 	}
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    model.Value
-		wantErr bool
+		name      string
+		responses map[string]response
+		args      args
+		want      model.Value
+		wantErr   bool
 	}{
 		{
-			name: "undefined query",
-			fields: fields{
-				responses: map[string]response{},
+			name: "success",
+			responses: map[string]response{
+				testQuery: response{
+					value: testResponse,
+					err:   nil,
+				},
 			},
+			args: args{
+				ctx: context.Background(),
+				q:   testQuery,
+				t:   time.Now(),
+			},
+			want: testResponse,
+		},
+		{
+			name:      "error-undefined-query",
+			responses: map[string]response{},
 			args: args{
 				ctx: context.Background(),
 				q:   "",
@@ -41,7 +64,7 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := PrometheusMockClient{
-				responses: tt.fields.responses,
+				responses: tt.responses,
 			}
 			got, err := p.Query(tt.args.ctx, tt.args.q, tt.args.t)
 			if (err != nil) != tt.wantErr {
