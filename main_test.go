@@ -419,10 +419,8 @@ func cloneHistory(h map[string]candidate) map[string]candidate {
 }
 func Test_updateHistory(t *testing.T) {
 	nodes := []string{
-		"test",
-		"test2",
-		"iad0t",
-		"iad1t",
+		"mlab1.iad0t.measurement-lab.org",
+		"mlab1.iad1t.measurement-lab.org",
 	}
 
 	tests := []struct {
