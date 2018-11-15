@@ -1,7 +1,23 @@
-ReBot is a tool for automatically rebooting downed servers.
+ReBot
+======
+The rebot tool identifies machines on the M-Lab infrastructure that are not
+reachable anymore and should be rebooted (according to various criteria) and
+attempts to reboot them through iDRAC.
 
-To generate a list of servers in need of a reboot, please close this repo and on your local machine, execute
+Criteria for reboot candidates
+---
 
-./mlab-ssh-outage.sh
+This is the list of criteria ReBot will check to determine if a machine needs
+to be rebooted.
 
-That will create an output directory called ssh_outage_<timestamp>. Any node shortnames in a file called reboot-me are in a hard down state for ssh and sshalt, and have not been acknowledged, thus need to be rebooted. If not such file exists, no machines need to be rebooted at the time the script is run.
+- machine is offline - port 806 down for the last 15m
+- machine is not lame-ducked - lame_duck_node is not 1
+- site and machine are not in GMX maintenance - gmx_machine_maintenance and gmx_site_maintenance are not 1
+- switch is online - probe_success{instance=~"s1.*", module="icmp"} has been 0 for the last 15m
+- there are no NDT tests running - rate(inotify_extension_create_total{ext=".s2c_snaplog"}[15m]) is 0 or not present
+- metrics are actually being collected for all probes (i.e. prometheus was up)
+  - count_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[15m]) >= 14
+
+Additionally, ReBot checks the following:
+- the machine has not been rebooted already in the last 24hrs
+- no more than 5 machines should be rebooted together at any time
