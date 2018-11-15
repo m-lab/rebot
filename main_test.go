@@ -423,34 +423,23 @@ func Test_updateHistory(t *testing.T) {
 		"mlab1.iad1t.measurement-lab.org",
 	}
 
-	tests := []struct {
-		name    string
-		nodes   []string
-		history map[string]candidate
-	}{
-		{
-			name:    "success",
-			nodes:   nodes,
-			history: cloneHistory(history),
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			updateHistory(tt.nodes, tt.history)
+	testHistory := cloneHistory(history)
 
-			// Check that LastReboot is within the last minute for nodes
-			// in the nodes slice.
-			for _, node := range nodes {
-				candidate, ok := tt.history[node]
-				if !ok {
-					t.Errorf("%v missing in the history map.", node)
-				}
+	t.Run("success", func(t *testing.T) {
+		updateHistory(nodes, testHistory)
 
-				if !candidate.LastReboot.After(time.Now().Add(-1 * time.Minute)) {
-					t.Errorf("updateHistory() did not update LastReboot for node %v.", candidate.Name)
-				}
-
+		// Check that LastReboot is within the last minute for nodes
+		// in the nodes slice.
+		for _, node := range nodes {
+			candidate, ok := testHistory[node]
+			if !ok {
+				t.Errorf("%v missing in the history map.", node)
 			}
-		})
-	}
+
+			if !candidate.LastReboot.After(time.Now().Add(-1 * time.Minute)) {
+				t.Errorf("updateHistory() did not update LastReboot for node %v.", candidate.Name)
+			}
+
+		}
+	})
 }
