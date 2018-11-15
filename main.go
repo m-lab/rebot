@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
@@ -213,11 +212,10 @@ func updateHistory(nodes []string, history map[string]candidate) {
 // already, thus we won't replace it.
 func initPrometheusClient() {
 	if prom == nil {
-		//user, pass := getCredentials(credentialsPath)
+		user, pass := getCredentials(credentialsPath)
 
 		config = api.Config{
-			Address:      "https://***REMOVED***@prometheus.mlab-oti.measurementlab.net",
-			RoundTripper: http.DefaultTransport,
+			Address:      "https://" + user + ":" + pass +"@prometheus.mlab-oti.measurementlab.net",
 		}
 
 		client, err := api.NewClient(config)
