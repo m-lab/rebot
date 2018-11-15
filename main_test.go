@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"reflect"
 	"testing"
@@ -466,23 +464,4 @@ func Test_updateHistory(t *testing.T) {
 			}
 		})
 	}
-}
-
-func Test_basicAuthRoundTripper_RoundTrip(t *testing.T) {
-	setupCredentials()
-	defer removeFiles(testCredentialsPath)
-
-	initPrometheusClient()
-	server := httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, req *http.Request) {
-		user, pass, ok := req.BasicAuth()
-		if !ok {
-			t.Errorf("Missing HTTP basic authentication.")
-		}
-
-		if user != "testuser" || pass != "testpass" {
-			t.Errorf("Unexpected username/password.")
-		}
-	}))
-
-	defer server.Close()
 }
