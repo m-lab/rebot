@@ -375,14 +375,6 @@ func Test_filterRecent(t *testing.T) {
 }
 
 func Test_main(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		{
-			name: "success",
-		},
-	}
-
 	setupCandidateHistory()
 	setupCredentials()
 	defer removeFiles(testHistoryPath, testCredentialsPath, "invalidhistory")
@@ -391,11 +383,10 @@ func Test_main(t *testing.T) {
 	historyPath = testHistoryPath
 	credentialsPath = testCredentialsPath
 	fmt.Println(switchQuery)
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			main()
-		})
-	}
+	t.Run("success", func(t *testing.T) {
+		main()
+	})
+
 }
 
 func Test_initPrometheusClient(t *testing.T) {
