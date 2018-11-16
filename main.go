@@ -39,9 +39,10 @@ const (
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
 	nodeQuery              = `(label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) == 0,
-				"site", "$1", "machine", ".+?\\.(.+?)\\..+") AND
-				label_replace(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) == 0,
-				"site", "$1", "machine", ".+?\\.(.+?)\\..+"))
+	"site", "$1", "machine", ".+?\\.(.+?)\\..+")
+unless on (machine)
+	label_replace(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) > 0,
+	"site", "$1", "machine", ".+?\\.(.+?)\\..+"))
 				unless on(machine) gmx_machine_maintenance == 1
 				unless on(site) gmx_site_maintenance == 1
 				unless on (machine) lame_duck_node == 1
@@ -251,16 +252,20 @@ func main() {
 	sites, err := getOfflineSites(prom)
 	rtx.Must(err, "Unable to retrieve offline switches from Prometheus")
 
+	fmt.Printf("Offline sites: %s\n", sites)
+
 	// Query for offline nodes
 	nodes, err := getOfflineNodes(prom, defaultMins)
 	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
 
-	fmt.Println(nodes)
+	fmt.Printf("Offline nodes: %s\n", nodes)
 
 	offline := filterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, candidateHistory)
 
 	// TODO(roberto): actually try to reboot the nodes.
+	fmt.Println("To reboot:")
+	fmt.Println(toReboot)
 
 	updateHistory(toReboot, candidateHistory)
 	writeCandidateHistory(historyPath, candidateHistory)
