@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/m-lab/go/rtx"
@@ -37,13 +38,17 @@ const (
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
-	nodeQuery              = `label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) == 0,
-				"site", "$1", "machine", ".+?\\.(.+?)\\..+")
+	defaultRebootCmd       = "drac.py"
+	nodeQuery              = `(label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) == 0,
+	"site", "$1", "machine", ".+?\\.(.+?)\\..+")
+unless on (machine)
+	label_replace(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) > 0,
+	"site", "$1", "machine", ".+?\\.(.+?)\\..+"))
 				unless on(machine) gmx_machine_maintenance == 1
 				unless on(site) gmx_site_maintenance == 1
 				unless on (machine) lame_duck_node == 1
-				unless on (machine) count_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%dm]) < 14
-				unless on (machine) rate(inotify_extension_create_total{ext=".s2c_snaplog"}[%dm]) > 0`
+				unless on (machine) count_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) < 14
+				unless on (machine) rate(inotify_extension_create_total{ext=".s2c_snaplog"}[%[1]dm]) > 0`
 
 	// To determine if a switch is offline, pings are generally more reliable
 	// than SNMP scraping.
@@ -57,11 +62,13 @@ var (
 
 	historyPath     string
 	credentialsPath string
+	rebootCmd       string
 )
 
 func init() {
 	historyPath = defaultHistoryPath
 	credentialsPath = defaultCredentialsPath
+	rebootCmd = defaultRebootCmd
 }
 
 // getOfflineSites checks for offline sites (switches) in the last N minutes.
@@ -85,7 +92,7 @@ func getOfflineSites(prom promClient) (map[string]*model.Sample, error) {
 // It returns a Vector of samples.
 func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
 
-	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes, minutes, minutes), time.Now())
+	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -225,6 +232,37 @@ func initPrometheusClient() {
 	}
 }
 
+// rebootOne reboots a single machine by calling the reboot command
+// and returns an error if the exit status is not zero.
+func rebootOne(toReboot string) error {
+	cmd := exec.Command(rebootCmd, "reboot", toReboot)
+	output, err := cmd.Output()
+
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	fmt.Printf("%s", output)
+	return nil
+}
+
+// rebootMany reboots an array of machines and returns a map of
+// machineName -> error for each element for which the rebootMany failed.
+func rebootMany(toReboot []string) map[string]error {
+
+	errors := make(map[string]error)
+
+	for _, m := range toReboot {
+		err := rebootOne(m)
+		if err != nil {
+			errors[m] = err
+		}
+	}
+
+	return errors
+}
+
 func main() {
 	initPrometheusClient()
 
@@ -235,15 +273,20 @@ func main() {
 	sites, err := getOfflineSites(prom)
 	rtx.Must(err, "Unable to retrieve offline switches from Prometheus")
 
+	fmt.Printf("Offline sites: %s\n", sites)
+
 	// Query for offline nodes
 	nodes, err := getOfflineNodes(prom, defaultMins)
-	fmt.Println(nodes)
 	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
+
+	fmt.Printf("Offline nodes: %s\n", nodes)
 
 	offline := filterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, candidateHistory)
 
 	// TODO(roberto): actually try to reboot the nodes.
+	fmt.Println("To reboot:")
+	fmt.Println(toReboot)
 
 	updateHistory(toReboot, candidateHistory)
 	writeCandidateHistory(historyPath, candidateHistory)
