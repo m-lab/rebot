@@ -387,27 +387,18 @@ func Test_main(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		main()
 	})
-
+	prom = nil
 }
 
 func Test_initPrometheusClient(t *testing.T) {
-	tests := []struct {
-		name string
-	}{
-		{
-			name: "success",
-		},
-	}
 
 	setupCredentials()
 	defer removeFiles(testCredentialsPath)
 
 	credentialsPath = testCredentialsPath
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			initPrometheusClient()
-		})
-	}
+	t.Run("success", func(t *testing.T) {
+		initPrometheusClient()
+	})
 }
 
 func cloneHistory(h map[string]candidate) map[string]candidate {
