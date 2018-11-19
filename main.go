@@ -38,6 +38,7 @@ const (
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
+	defaultRebootCmd       = "drac.py"
 	nodeQuery              = `(label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) == 0,
 	"site", "$1", "machine", ".+?\\.(.+?)\\..+")
 unless on (machine)
@@ -61,11 +62,13 @@ var (
 
 	historyPath     string
 	credentialsPath string
+	rebootCmd       string
 )
 
 func init() {
 	historyPath = defaultHistoryPath
 	credentialsPath = defaultCredentialsPath
+	rebootCmd = defaultRebootCmd
 }
 
 // getOfflineSites checks for offline sites (switches) in the last N minutes.
@@ -229,17 +232,35 @@ func initPrometheusClient() {
 	}
 }
 
-func reboot(toReboot []string) {
-	for _, m := range toReboot {
-		cmd := exec.Command("drac.py", "reboot", m)
-		output, err := cmd.Output()
+// rebootOne reboots a single machine by calling the reboot command
+// and returns an error if the exit status is not zero.
+func rebootOne(toReboot string) error {
+	cmd := exec.Command(rebootCmd, "reboot", toReboot)
+	output, err := cmd.Output()
 
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		fmt.Printf("%s", output)
+	if err != nil {
+		fmt.Println(err)
+		return err
 	}
+
+	fmt.Printf("%s", output)
+	return nil
+}
+
+// rebootMany reboots an array of machines and returns a map of
+// machineName -> error for each element for which the rebootMany failed.
+func rebootMany(toReboot []string) map[string]error {
+
+	errors := make(map[string]error)
+
+	for _, m := range toReboot {
+		err := rebootOne(m)
+		if err != nil {
+			errors[m] = err
+		}
+	}
+
+	return errors
 }
 
 func main() {
