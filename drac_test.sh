@@ -12,8 +12,8 @@ if [ $# != 2 ] ; then
 fi
 
 # Fail if the machine name starts with mlab4.*
-REGEX_DATE='mlab4.*'
-if [[ $2 =~ $REGEX_DATE ]] ; then
+REGEX_HOST='mlab4.*'
+if [[ $2 =~ $REGEX_HOST ]] ; then
     exit 1;
 fi
 
