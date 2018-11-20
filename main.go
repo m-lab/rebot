@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -63,6 +64,8 @@ var (
 	historyPath     string
 	credentialsPath string
 	rebootCmd       string
+
+	fDryRun = flag.Bool("dryrun", false, "Do not reboot anything, just list.")
 )
 
 func init() {
@@ -265,7 +268,7 @@ func rebootMany(toReboot []string) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {
-		log.Info("There are no nodes offline.")
+		log.Info("There are no nodes to reboot.")
 		return errors
 	}
 
@@ -289,7 +292,17 @@ func rebootMany(toReboot []string) map[string]error {
 	return errors
 }
 
+// parseFlags reads the runtime flags.
+func parseFlags() {
+	flag.Parse()
+
+	if *fDryRun {
+		log.Info("Dry run, no node will be rebooted and the history file will not be updated.")
+	}
+}
+
 func main() {
+	parseFlags()
 	initPrometheusClient()
 
 	// First, check to see if there's an existing candidate history file
@@ -306,9 +319,11 @@ func main() {
 	offline := filterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, candidateHistory)
 
-	rebootMany(toReboot)
+	if !*fDryRun {
+		rebootMany(toReboot)
+		updateHistory(toReboot, candidateHistory)
+		writeCandidateHistory(historyPath, candidateHistory)
+	}
 
-	updateHistory(toReboot, candidateHistory)
-	writeCandidateHistory(historyPath, candidateHistory)
-
+	log.Info("Done.")
 }
