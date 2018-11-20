@@ -12,7 +12,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"os"
 	"os/exec"
 	"time"
@@ -21,6 +20,7 @@ import (
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
+	log "github.com/sirupsen/logrus"
 )
 
 // Prometheus HTTP client's interface
@@ -69,6 +69,8 @@ func init() {
 	historyPath = defaultHistoryPath
 	credentialsPath = defaultCredentialsPath
 	rebootCmd = defaultRebootCmd
+
+	log.SetLevel(log.DebugLevel)
 }
 
 // getOfflineSites checks for offline sites (switches) in the last N minutes.
@@ -83,6 +85,7 @@ func getOfflineSites(prom promClient) (map[string]*model.Sample, error) {
 
 	for _, s := range values.(model.Vector) {
 		offline[string(s.Metric["site"])] = s
+		log.WithFields(log.Fields{"site": s.Metric["site"]}).Warn("Offline switch found.")
 	}
 
 	return offline, err
@@ -95,6 +98,10 @@ func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
 	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
+	}
+
+	if len(values.(model.Vector)) != 0 {
+		log.WithFields(log.Fields{"nodes": values}).Warn("Offline nodes found.")
 	}
 
 	return values.(model.Vector), err
@@ -137,8 +144,7 @@ func readCandidateHistory(path string) map[string]candidate {
 	err = json.Unmarshal(file, &candidateHistory)
 
 	if err != nil {
-		log.Println("Cannot unmarshal the candidates' history file - ignoring it")
-		log.Println(err)
+		log.Warn("Cannot unmarshal the candidates' history file - ignoring it. ", err)
 		return make(map[string]candidate)
 	}
 
@@ -165,7 +171,7 @@ func filterOfflineSites(sites map[string]*model.Sample, nodes model.Vector) []st
 		if _, ok := sites[site]; !ok {
 			candidates = append(candidates, string(value.Metric["machine"]))
 		} else {
-			log.Println("Ignoring " + machine + " as the switch is offline.")
+			log.Info("Ignoring " + machine + " as the switch is offline.")
 		}
 	}
 
@@ -184,7 +190,7 @@ func filterRecent(nodes []string, candidateHistory map[string]candidate) []strin
 			if time.Now().Sub(candidate.LastReboot) > 24*time.Hour {
 				rebootList = append(rebootList, candidate.Name)
 			} else {
-				log.Println("Skipping " + node + " as it was recently rebooted.")
+				log.WithFields(log.Fields{"node": candidate.Name, "LastReboot": candidate.LastReboot}).Info("The node was rebooted recently - skipping it.")
 			}
 		} else {
 			// New candidate - just add it to the list.
@@ -199,6 +205,11 @@ func filterRecent(nodes []string, candidateHistory map[string]candidate) []strin
 // the nodes slice. If a candidate did not previously exist, it creates a
 // new one.
 func updateHistory(nodes []string, history map[string]candidate) {
+	if len(nodes) == 0 {
+		return
+	}
+
+	log.WithFields(log.Fields{"nodes": nodes}).Info("Updating history...")
 	for _, node := range nodes {
 		el, ok := history[node]
 
@@ -239,21 +250,36 @@ func rebootOne(toReboot string) error {
 	output, err := cmd.Output()
 
 	if err != nil {
-		fmt.Println(err)
+		log.Error(err)
 		return err
 	}
 
-	fmt.Printf("%s", output)
+	log.Debug(string(output))
+	log.WithFields(log.Fields{"node": toReboot}).Info("Reboot command successfully sent.")
 	return nil
 }
 
 // rebootMany reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
 func rebootMany(toReboot []string) map[string]error {
-
 	errors := make(map[string]error)
 
+	if len(toReboot) == 0 {
+		log.Info("There are no nodes offline.")
+		return errors
+	}
+
+	// If there are more than 5 nodes to be rebooted, do nothing.
+	// TODO(roberto) find a better way to report this case to the caller.
+	if len(toReboot) > 5 {
+		log.WithFields(log.Fields{"nodes": toReboot}).Error("There are more than 5 nodes offline, skipping.")
+		return errors
+	}
+
+	log.WithFields(log.Fields{"nodes": toReboot}).Info("These nodes are going to be rebooted.")
+
 	for _, m := range toReboot {
+		log.WithFields(log.Fields{"node": m}).Info("Rebooting node...")
 		err := rebootOne(m)
 		if err != nil {
 			errors[m] = err
@@ -271,22 +297,16 @@ func main() {
 
 	// Query for offline switches
 	sites, err := getOfflineSites(prom)
-	rtx.Must(err, "Unable to retrieve offline switches from Prometheus")
-
-	fmt.Printf("Offline sites: %s\n", sites)
+	rtx.Must(err, "Unable to retrieve offline sites from Prometheus")
 
 	// Query for offline nodes
 	nodes, err := getOfflineNodes(prom, defaultMins)
 	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
 
-	fmt.Printf("Offline nodes: %s\n", nodes)
-
 	offline := filterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, candidateHistory)
 
-	// TODO(roberto): actually try to reboot the nodes.
-	fmt.Println("To reboot:")
-	fmt.Println(toReboot)
+	rebootMany(toReboot)
 
 	updateHistory(toReboot, candidateHistory)
 	writeCandidateHistory(historyPath, candidateHistory)
