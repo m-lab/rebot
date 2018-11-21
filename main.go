@@ -53,7 +53,7 @@ unless on (machine)
 
 	// To determine if a switch is offline, pings are generally more reliable
 	// than SNMP scraping.
-	switchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0`
+	switchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
 )
 
 var (
