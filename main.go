@@ -8,32 +8,14 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
-	"encoding/json"
 	"flag"
-	"fmt"
-	"io/ioutil"
 	"os"
-	"os/exec"
-	"time"
 
 	"github.com/m-lab/go/rtx"
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
-	"github.com/prometheus/common/model"
 	log "github.com/sirupsen/logrus"
 )
-
-// Prometheus HTTP client's interface
-type promClient interface {
-	Query(context.Context, string, time.Time) (model.Value, error)
-}
-
-// Struct to hold history of a given service's outages
-type candidate struct {
-	Name       string
-	LastReboot time.Time
-}
 
 const (
 	defaultMins            = 15
@@ -76,40 +58,6 @@ func init() {
 	log.SetLevel(log.DebugLevel)
 }
 
-// getOfflineSites checks for offline sites (switches) in the last N minutes.
-// It returns a sitename -> Sample map.
-func getOfflineSites(prom promClient) (map[string]*model.Sample, error) {
-	offline := make(map[string]*model.Sample)
-
-	values, err := prom.Query(context.Background(), switchQuery, time.Now())
-	if err != nil {
-		return nil, err
-	}
-
-	for _, s := range values.(model.Vector) {
-		offline[string(s.Metric["site"])] = s
-		log.WithFields(log.Fields{"site": s.Metric["site"]}).Warn("Offline switch found.")
-	}
-
-	return offline, err
-}
-
-// getOfflineNodes checks for offline nodes in the last N minutes.
-// It returns a Vector of samples.
-func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
-
-	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
-	if err != nil {
-		return nil, err
-	}
-
-	if len(values.(model.Vector)) != 0 {
-		log.WithFields(log.Fields{"nodes": values}).Warn("Offline nodes found.")
-	}
-
-	return values.(model.Vector), err
-}
-
 // getCredentials reads the Prometheus API credentials from the
 // provided path.
 // It expects a two line file, with username on the first line and password
@@ -132,102 +80,6 @@ func getCredentials(path string) (string, string) {
 	return string(bytes.Trim(username, "\n")), string(bytes.Trim(password, "\n"))
 }
 
-// readCandidateHistory reads a JSON file containing a map of
-// string -> candidate. If the file cannot be read or deserialized, it returns
-// an empty map.
-func readCandidateHistory(path string) map[string]candidate {
-	var candidateHistory map[string]candidate
-	file, err := ioutil.ReadFile(path)
-
-	if err != nil {
-		// There is no existing candidate history file -> return empty map.
-		return make(map[string]candidate)
-	}
-
-	err = json.Unmarshal(file, &candidateHistory)
-
-	if err != nil {
-		log.Warn("Cannot unmarshal the candidates' history file - ignoring it. ", err)
-		return make(map[string]candidate)
-	}
-
-	return candidateHistory
-}
-
-// writeCandidateHistory serializes a string -> candidate map to a JSON file.
-// If the map cannot be serialized or the file cannot be written, it exits.
-func writeCandidateHistory(path string, candidateHistory map[string]candidate) {
-	newCandidates, err := json.Marshal(candidateHistory)
-	rtx.Must(err, "Cannot marshal the candidates history!")
-
-	err = ioutil.WriteFile(path, newCandidates, 0644)
-	rtx.Must(err, "Cannot write the candidates history's JSON file!")
-}
-
-func filterOfflineSites(sites map[string]*model.Sample, nodes model.Vector) []string {
-	var candidates []string
-
-	for _, value := range nodes {
-		// Ignore machines in sites where the switch is offline.
-		site := string(value.Metric["site"])
-		machine := string(value.Metric["machine"])
-		if _, ok := sites[site]; !ok {
-			candidates = append(candidates, string(value.Metric["machine"]))
-		} else {
-			log.Info("Ignoring " + machine + " as the switch is offline.")
-		}
-	}
-
-	return candidates
-}
-
-// filterRecent filters out nodes that were rebooted less than 24 hours ago.
-func filterRecent(nodes []string, candidateHistory map[string]candidate) []string {
-	var rebootList []string
-
-	for _, node := range nodes {
-		candidate, ok := candidateHistory[node]
-		if ok {
-			// This candidate has been down before.
-			// Check to see if the previous time was w/in the past 24 hours
-			if time.Now().Sub(candidate.LastReboot) > 24*time.Hour {
-				rebootList = append(rebootList, candidate.Name)
-			} else {
-				log.WithFields(log.Fields{"node": candidate.Name, "LastReboot": candidate.LastReboot}).Info("The node was rebooted recently - skipping it.")
-			}
-		} else {
-			// New candidate - just add it to the list.
-			rebootList = append(rebootList, node)
-		}
-	}
-
-	return rebootList
-}
-
-// updateHistory updates the LastReboot field for all the candidates named in
-// the nodes slice. If a candidate did not previously exist, it creates a
-// new one.
-func updateHistory(nodes []string, history map[string]candidate) {
-	if len(nodes) == 0 {
-		return
-	}
-
-	log.WithFields(log.Fields{"nodes": nodes}).Info("Updating history...")
-	for _, node := range nodes {
-		el, ok := history[node]
-
-		if ok {
-			el.LastReboot = time.Now()
-			history[node] = el
-		} else {
-			history[node] = candidate{
-				Name:       node,
-				LastReboot: time.Now(),
-			}
-		}
-	}
-}
-
 // initPrometheusClient initializes a Prometheus client with HTTP basic
 // authentication. If we are running main() in a test, prom will be set
 // already, thus we won't replace it.
@@ -244,52 +96,6 @@ func initPrometheusClient() {
 
 		prom = v1.NewAPI(client)
 	}
-}
-
-// rebootOne reboots a single machine by calling the reboot command
-// and returns an error if the exit status is not zero.
-func rebootOne(toReboot string) error {
-	cmd := exec.Command(rebootCmd, "reboot", toReboot)
-	output, err := cmd.Output()
-
-	if err != nil {
-		log.Error(err)
-		return err
-	}
-
-	log.Debug(string(output))
-	log.WithFields(log.Fields{"node": toReboot}).Info("Reboot command successfully sent.")
-	return nil
-}
-
-// rebootMany reboots an array of machines and returns a map of
-// machineName -> error for each element for which the rebootMany failed.
-func rebootMany(toReboot []string) map[string]error {
-	errors := make(map[string]error)
-
-	if len(toReboot) == 0 {
-		log.Info("There are no nodes to reboot.")
-		return errors
-	}
-
-	// If there are more than 5 nodes to be rebooted, do nothing.
-	// TODO(roberto) find a better way to report this case to the caller.
-	if len(toReboot) > 5 {
-		log.WithFields(log.Fields{"nodes": toReboot}).Error("There are more than 5 nodes offline, skipping.")
-		return errors
-	}
-
-	log.WithFields(log.Fields{"nodes": toReboot}).Info("These nodes are going to be rebooted.")
-
-	for _, m := range toReboot {
-		log.WithFields(log.Fields{"node": m}).Info("Rebooting node...")
-		err := rebootOne(m)
-		if err != nil {
-			errors[m] = err
-		}
-	}
-
-	return errors
 }
 
 // parseFlags reads the runtime flags.
