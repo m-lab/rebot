@@ -47,7 +47,7 @@ var (
 	credentialsPath string
 	rebootCmd       string
 
-	fDryRun = flag.Bool("dryrun", false, "Do not reboot anything, just list.")
+	fDryRun bool
 )
 
 func init() {
@@ -56,6 +56,9 @@ func init() {
 	rebootCmd = defaultRebootCmd
 
 	log.SetLevel(log.DebugLevel)
+
+	flag.BoolVar(&fDryRun, "dryrun", false,
+		"Do not reboot anything, just list.")
 }
 
 // getCredentials reads the Prometheus API credentials from the
@@ -102,13 +105,14 @@ func initPrometheusClient() {
 func parseFlags() {
 	flag.Parse()
 
-	if *fDryRun {
+	if fDryRun {
 		log.Info("Dry run, no node will be rebooted and the history file will not be updated.")
 	}
 }
 
 func main() {
 	parseFlags()
+
 	initPrometheusClient()
 
 	// First, check to see if there's an existing candidate history file
@@ -125,7 +129,7 @@ func main() {
 	offline := filterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, candidateHistory)
 
-	if !*fDryRun {
+	if !fDryRun {
 		rebootMany(toReboot)
 		updateHistory(toReboot, candidateHistory)
 		writeCandidateHistory(historyPath, candidateHistory)
