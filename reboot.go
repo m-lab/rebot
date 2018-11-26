@@ -42,11 +42,16 @@ func rebootMany(toReboot []string) map[string]error {
 	log.WithFields(log.Fields{"nodes": toReboot}).Info("These nodes are going to be rebooted.")
 
 	for _, m := range toReboot {
-		log.WithFields(log.Fields{"node": m}).Info("Rebooting node...")
-		err := rebootOne(m)
-		if err != nil {
-			errors[m] = err
+		log.WithFields(log.Fields{"node": m, "dryrun": fDryRun}).Info("Rebooting node...")
+		if !fDryRun {
+			err := rebootOne(m)
+			if err != nil {
+				errors[m] = err
+			}
 		}
+
+		metricRebooted.WithLabelValues(m, "TODO").Set(1)
+
 	}
 
 	return errors

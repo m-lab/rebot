@@ -55,17 +55,18 @@ func updateHistory(nodes []string, history map[string]candidate) {
 		return
 	}
 
-	log.WithFields(log.Fields{"nodes": nodes}).Info("Updating history...")
-	for _, node := range nodes {
-		el, ok := history[node]
-
-		if ok {
-			el.LastReboot = time.Now()
-			history[node] = el
-		} else {
-			history[node] = candidate{
-				Name:       node,
-				LastReboot: time.Now(),
+	log.WithFields(log.Fields{"nodes": nodes, "dryrun": fDryRun}).Info("Updating history...")
+	if !fDryRun {
+		for _, node := range nodes {
+			el, ok := history[node]
+			if ok {
+				el.LastReboot = time.Now()
+				history[node] = el
+			} else {
+				history[node] = candidate{
+					Name:       node,
+					LastReboot: time.Now(),
+				}
 			}
 		}
 	}

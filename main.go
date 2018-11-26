@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"flag"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +18,8 @@ import (
 	"github.com/m-lab/go/rtx"
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -51,9 +54,24 @@ var (
 	credentialsPath string
 	rebootCmd       string
 
-	fDryRun bool
+	fDryRun     bool
+	fListenAddr string
+
+	// Prometheus metric for exposing number of rebooted machines on last run.
+	metricRebooted = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "rebot_last_rebooted",
+			Help: "Whether a machine was rebooted during the last run.",
+		},
+		[]string{
+			"machine",
+			"site",
+		},
+	)
 )
 
+// init initializes the Prometheus metrics and drops any passed flags into
+// global variables.
 func init() {
 	historyPath = defaultHistoryPath
 	credentialsPath = defaultCredentialsPath
@@ -63,6 +81,9 @@ func init() {
 
 	flag.BoolVar(&fDryRun, "dryrun", false,
 		"Do not reboot anything, just list.")
+	flag.StringVar(&fListenAddr, "web.listen-address", ":9999",
+		"Address to listen on for telemetry.")
+	prometheus.MustRegister(metricRebooted)
 }
 
 // getCredentials reads the Prometheus API credentials from the
@@ -127,10 +148,13 @@ func checkAndReboot(history map[string]candidate) {
 	offline := filterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, history)
 
-	if !fDryRun {
-		rebootMany(toReboot)
-		updateHistory(toReboot, history)
-	}
+	metricRebooted.Reset()
+
+	toReboot = []string{"mlab1.lga0t.measurement-lab.org"}
+
+	rebootMany(toReboot)
+	updateHistory(toReboot, history)
+
 }
 
 // cleanup waits for a termination signal, writes the candidates' history
@@ -142,9 +166,16 @@ func cleanup(c chan os.Signal, history map[string]candidate) {
 	os.Exit(0)
 }
 
+// promMetrics serves Prometheus metrics over HTTP.
+func promMetrics() {
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(fListenAddr, nil))
+}
+
 func main() {
 	parseFlags()
 	initPrometheusClient()
+	go promMetrics()
 
 	// First, check to see if there's an existing candidate history file
 	// and make sure we always write it back on exit.
