@@ -10,6 +10,9 @@ import (
 	"bytes"
 	"flag"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/m-lab/go/rtx"
 	"github.com/prometheus/client_golang/api"
@@ -18,6 +21,7 @@ import (
 )
 
 const (
+	defaultIntervalMins    = 30
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
@@ -110,14 +114,8 @@ func parseFlags() {
 	}
 }
 
-func main() {
-	parseFlags()
-
-	initPrometheusClient()
-
-	// First, check to see if there's an existing candidate history file
-	candidateHistory := readCandidateHistory(historyPath)
-
+// checkAndReboot implements Rebot's reboot logic.
+func checkAndReboot(history map[string]candidate) {
 	// Query for offline switches
 	sites, err := getOfflineSites(prom)
 	rtx.Must(err, "Unable to retrieve offline sites from Prometheus")
@@ -127,13 +125,39 @@ func main() {
 	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
 
 	offline := filterOfflineSites(sites, nodes)
-	toReboot := filterRecent(offline, candidateHistory)
+	toReboot := filterRecent(offline, history)
 
 	if !fDryRun {
 		rebootMany(toReboot)
-		updateHistory(toReboot, candidateHistory)
-		writeCandidateHistory(historyPath, candidateHistory)
+		updateHistory(toReboot, history)
 	}
+}
 
-	log.Info("Done.")
+// cleanup waits for a termination signal, writes the candidates' history
+// and exits.
+func cleanup(c chan os.Signal, history map[string]candidate) {
+	<-c
+	log.Info("Cleaning up...")
+	writeCandidateHistory(historyPath, history)
+	os.Exit(0)
+}
+
+func main() {
+	parseFlags()
+	initPrometheusClient()
+
+	// First, check to see if there's an existing candidate history file
+	// and make sure we always write it back on exit.
+	candidateHistory := readCandidateHistory(historyPath)
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go cleanup(c, candidateHistory)
+
+	for {
+		checkAndReboot(candidateHistory)
+
+		log.Info("Done. Going to sleep for ", defaultIntervalMins, " minutes...")
+		time.Sleep(defaultIntervalMins * time.Second)
+	}
 }
