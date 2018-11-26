@@ -123,23 +123,22 @@ func parseFlags() {
 func checkAndReboot(history map[string]candidate) {
 	// Query for offline switches
 	sites, err := getOfflineSites(prom)
-	rtx.Must(err, "Unable to retrieve offline sites from Prometheus")
+	if err != nil {
+		log.Error("Unable to retrieve offline sites from Prometheus")
+		return
+	}
 
 	// Query for offline nodes
 	nodes, err := getOfflineNodes(prom, defaultMins)
-	rtx.Must(err, "Unable to retrieve offline nodes from Prometheus")
+	if err != nil {
+		log.Error("Unable to retrieve offline nodes from Prometheus")
+		return
+	}
 
 	offline := filterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, history)
 
 	metricRebooted.Reset()
-
-	toReboot = []candidate{
-		candidate{
-			Name: "mlab1.lga0t.measurement-lab.org",
-			Site: "lga0t",
-		},
-	}
 
 	rebootMany(toReboot)
 	updateHistory(toReboot, history)
