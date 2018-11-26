@@ -9,17 +9,23 @@ func Test_rebootOne(t *testing.T) {
 	rebootCmd = testRebootCmd
 	tests := []struct {
 		name     string
-		toReboot string
+		toReboot candidate
 		wantErr  bool
 	}{
 		{
-			name:     "success-exit-status-zero",
-			toReboot: "mlab1.lga0t.measurement-lab.org",
+			name: "success-exit-status-zero",
+			toReboot: candidate{
+				Name: "mlab1.lga0t.measurement-lab.org",
+				Site: "lga0t",
+			},
 		},
 		{
-			name:     "failure-exit-status-not-zero",
-			toReboot: "mlab4.lga0t.measurement-lab.org",
-			wantErr:  true,
+			name: "failure-exit-status-not-zero",
+			toReboot: candidate{
+				Name: "mlab4.lga0t.measurement-lab.org",
+				Site: "lga0t",
+			},
+			wantErr: true,
 		},
 	}
 	for _, tt := range tests {
@@ -34,9 +40,15 @@ func Test_rebootOne(t *testing.T) {
 func Test_rebootMany(t *testing.T) {
 	rebootCmd = testRebootCmd
 
-	toReboot := []string{
-		"mlab1.lga0t.measurement-lab.org",
-		"mlab2.lga0t.measurement-lab.org",
+	toReboot := []candidate{
+		candidate{
+			Name: "mlab1.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
+		candidate{
+			Name: "mlab2.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
 	}
 	want := map[string]error{}
 
@@ -47,8 +59,11 @@ func Test_rebootMany(t *testing.T) {
 	})
 
 	// mlab4.* machines always returns a non-zero exit code in drac_test.sh.
-	toReboot = []string{
-		"mlab4.lga0t.measurement-lab.org",
+	toReboot = []candidate{
+		candidate{
+			Name: "mlab4.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
 	}
 
 	t.Run("failure-exit-code-non-zero", func(t *testing.T) {

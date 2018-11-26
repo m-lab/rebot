@@ -99,9 +99,15 @@ func cloneHistory(h map[string]candidate) map[string]candidate {
 	return newHistory
 }
 func Test_updateHistory(t *testing.T) {
-	nodes := []string{
-		"mlab1.iad0t.measurement-lab.org",
-		"mlab1.iad1t.measurement-lab.org",
+	nodes := []candidate{
+		candidate{
+			Name: "mlab1.iad0t.measurement-lab.org",
+			Site: "iad0t",
+		},
+		candidate{
+			Name: "mlab1.iad1t.measurement-lab.org",
+			Site: "iad1t",
+		},
 	}
 
 	testHistory := cloneHistory(history)
@@ -111,10 +117,10 @@ func Test_updateHistory(t *testing.T) {
 
 		// Check that LastReboot is within the last minute for nodes
 		// in the nodes slice.
-		for _, node := range nodes {
-			candidate, ok := testHistory[node]
+		for _, candidate := range nodes {
+			candidate, ok := testHistory[candidate.Name]
 			if !ok {
-				t.Errorf("%v missing in the history map.", node)
+				t.Errorf("%v missing in the history map.", candidate.Name)
 			}
 
 			if !candidate.LastReboot.After(time.Now().Add(-1 * time.Minute)) {

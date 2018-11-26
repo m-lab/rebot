@@ -3,9 +3,7 @@ package main
 import (
 	"reflect"
 	"testing"
-	"time"
 
-	"github.com/m-lab/rebot/promtest"
 	"github.com/prometheus/common/model"
 )
 
@@ -48,15 +46,18 @@ func Test_getOfflineNodes(t *testing.T) {
 		name    string
 		prom    promClient
 		minutes int
-		want    model.Vector
+		want    []candidate
 		wantErr bool
 	}{
 		{
 			name:    "success",
 			prom:    fakeProm,
 			minutes: testMins,
-			want: model.Vector{
-				fakeOfflineNode,
+			want: []candidate{
+				candidate{
+					Name: "mlab1.iad0t.measurement-lab.org",
+					Site: "iad0t",
+				},
 			},
 		},
 		{
@@ -82,41 +83,44 @@ func Test_getOfflineNodes(t *testing.T) {
 
 func Test_filterOfflineSites(t *testing.T) {
 
+	candidates := []candidate{
+		candidate{
+			Name: "mlab1.iad0t.measurement-lab.org",
+			Site: "iad0t",
+		},
+	}
+
 	tests := []struct {
-		name  string
-		sites map[string]*model.Sample
-		nodes model.Vector
-		want  []string
+		name       string
+		sites      map[string]*model.Sample
+		candidates []candidate
+		want       []candidate
 	}{
 		{
 			name: "success-filtered-node-when-site-offline",
 			sites: map[string]*model.Sample{
 				"iad0t": fakeOfflineSwitch,
 			},
-			nodes: offlineNodes,
-			want:  []string{},
+			candidates: candidates,
+			want:       []candidate{},
 		},
 		{
 			name: "success-offline-node-returned",
 			sites: map[string]*model.Sample{
-				"iad0t": fakeOfflineSwitch,
+				"iad1t": fakeOfflineSwitch,
 			},
-			nodes: model.Vector{
-				promtest.CreateSample(map[string]string{
-					"instance": "mlab1.iad1t.measurement-lab.org:806",
-					"job":      "blackbox-targets",
-					"machine":  "mlab1.iad1t.measurement-lab.org",
-					"module":   "ssh_v4_online",
-					"service":  "ssh806",
-					"site":     "iad1t",
-				}, 0, model.Time(time.Now().Unix())),
+			candidates: candidates,
+			want: []candidate{
+				candidate{
+					Name: "mlab1.iad0t.measurement-lab.org",
+					Site: "iad0t",
+				},
 			},
-			want: []string{"mlab1.iad1t.measurement-lab.org"},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := filterOfflineSites(tt.sites, tt.nodes); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
+			if got := filterOfflineSites(tt.sites, tt.candidates); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("filterOfflineSites() = %v, want %v", got, tt.want)
 			}
 		})
@@ -126,52 +130,70 @@ func Test_filterOfflineSites(t *testing.T) {
 func Test_filterRecent(t *testing.T) {
 
 	// Nodes where no previous reboot was present
-	noHistory := []string{
-		"mlab2.iad1t.measurement-lab.org",
+	noHistory := []candidate{
+		candidate{
+			Name: "mlab2.iad1t.measurement-lab.org",
+			Site: "iad1t",
+		},
 	}
 
 	// Nodes where LastReboot is before 24hrs ago.
-	rebootable := []string{
-		"mlab2.iad0t.measurement-lab.org",
+	rebootable := []candidate{
+		candidate{
+			Name: "mlab2.iad0t.measurement-lab.org",
+			Site: "iad0t",
+		},
 	}
 
 	// Nodes where LastReboot is within the last 24hrs.
-	notRebootable := []string{
-		"mlab1.iad0t.measurement-lab.org",
-		"mlab1.iad1t.measurement-lab.org",
+	notRebootable := []candidate{
+		candidate{
+			Name: "mlab1.iad0t.measurement-lab.org",
+			Site: "iad0t",
+		},
+		candidate{
+			Name: "mlab1.iad1t.measurement-lab.org",
+			Site: "iad1t",
+		},
 	}
 	tests := []struct {
 		name             string
-		nodes            []string
+		candidates       []candidate
 		candidateHistory map[string]candidate
-		want             []string
+		want             []candidate
 	}{
 		{
 			name:             "success-no-history",
-			nodes:            noHistory,
+			candidates:       noHistory,
 			candidateHistory: history,
-			want: []string{
-				"mlab2.iad1t.measurement-lab.org",
+			want: []candidate{
+				candidate{
+					Name: "mlab2.iad1t.measurement-lab.org",
+					Site: "iad1t",
+				},
 			},
 		},
 		{
 			name:             "success-rebootable",
-			nodes:            rebootable,
+			candidates:       rebootable,
 			candidateHistory: history,
-			want: []string{
-				"mlab2.iad0t.measurement-lab.org",
+			want: []candidate{
+				candidate{
+					Name: "mlab2.iad0t.measurement-lab.org",
+					Site: "iad0t",
+				},
 			},
 		},
 		{
 			name:             "success-not-rebootable",
-			nodes:            notRebootable,
+			candidates:       notRebootable,
 			candidateHistory: history,
-			want:             []string{},
+			want:             []candidate{},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := filterRecent(tt.nodes, tt.candidateHistory); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
+			if got := filterRecent(tt.candidates, tt.candidateHistory); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("filterRecent() = %v, want %v", got, tt.want)
 			}
 		})

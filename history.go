@@ -12,6 +12,7 @@ import (
 // Struct to hold history of a given service's outages
 type candidate struct {
 	Name       string
+	Site       string
 	LastReboot time.Time
 }
 
@@ -50,21 +51,22 @@ func writeCandidateHistory(path string, candidateHistory map[string]candidate) {
 // updateHistory updates the LastReboot field for all the candidates named in
 // the nodes slice. If a candidate did not previously exist, it creates a
 // new one.
-func updateHistory(nodes []string, history map[string]candidate) {
-	if len(nodes) == 0 {
+func updateHistory(candidates []candidate, history map[string]candidate) {
+	if len(candidates) == 0 {
 		return
 	}
 
-	log.WithFields(log.Fields{"nodes": nodes, "dryrun": fDryRun}).Info("Updating history...")
+	log.WithFields(log.Fields{"nodes": candidates, "dryrun": fDryRun}).Info("Updating history...")
 	if !fDryRun {
-		for _, node := range nodes {
-			el, ok := history[node]
+		for _, c := range candidates {
+			el, ok := history[c.Name]
 			if ok {
 				el.LastReboot = time.Now()
-				history[node] = el
+				history[c.Name] = el
 			} else {
-				history[node] = candidate{
-					Name:       node,
+				history[c.Name] = candidate{
+					Name:       c.Name,
+					Site:       c.Site,
 					LastReboot: time.Now(),
 				}
 			}

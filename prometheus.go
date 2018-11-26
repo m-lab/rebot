@@ -34,8 +34,7 @@ func getOfflineSites(prom promClient) (map[string]*model.Sample, error) {
 
 // getOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
-func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
-
+func getOfflineNodes(prom promClient, minutes int) ([]candidate, error) {
 	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
@@ -45,45 +44,58 @@ func getOfflineNodes(prom promClient, minutes int) (model.Vector, error) {
 		log.WithFields(log.Fields{"nodes": values}).Warn("Offline nodes found.")
 	}
 
-	return values.(model.Vector), err
+	candidates := make([]candidate, 0)
+
+	for _, sample := range values.(model.Vector) {
+		site := sample.Metric["site"]
+		machine := sample.Metric["machine"]
+		log.Info("adding " + string(machine))
+		candidates = append(candidates, candidate{
+			Name: string(machine),
+			Site: string(site),
+		})
+	}
+
+	return candidates, nil
 }
 
-func filterOfflineSites(sites map[string]*model.Sample, nodes model.Vector) []string {
-	var candidates []string
+func filterOfflineSites(sites map[string]*model.Sample, candidates []candidate) []candidate {
 
-	for _, value := range nodes {
+	filtered := make([]candidate, 0)
+
+	for _, c := range candidates {
 		// Ignore machines in sites where the switch is offline.
-		site := string(value.Metric["site"])
-		machine := string(value.Metric["machine"])
+		site := c.Site
+		machine := c.Name
 		if _, ok := sites[site]; !ok {
-			candidates = append(candidates, string(value.Metric["machine"]))
+			filtered = append(filtered, c)
 		} else {
 			log.Info("Ignoring " + machine + " as the switch is offline.")
 		}
 	}
 
-	return candidates
+	return filtered
 }
 
 // filterRecent filters out nodes that were rebooted less than 24 hours ago.
-func filterRecent(nodes []string, candidateHistory map[string]candidate) []string {
-	var rebootList []string
+func filterRecent(candidates []candidate, candidateHistory map[string]candidate) []candidate {
+	filtered := make([]candidate, 0)
 
-	for _, node := range nodes {
-		candidate, ok := candidateHistory[node]
+	for _, candidate := range candidates {
+		history, ok := candidateHistory[candidate.Name]
 		if ok {
 			// This candidate has been down before.
 			// Check to see if the previous time was w/in the past 24 hours
-			if time.Now().Sub(candidate.LastReboot) > 24*time.Hour {
-				rebootList = append(rebootList, candidate.Name)
+			if time.Now().Sub(history.LastReboot) > 24*time.Hour {
+				filtered = append(filtered, candidate)
 			} else {
 				log.WithFields(log.Fields{"node": candidate.Name, "LastReboot": candidate.LastReboot}).Info("The node was rebooted recently - skipping it.")
 			}
 		} else {
 			// New candidate - just add it to the list.
-			rebootList = append(rebootList, node)
+			filtered = append(filtered, candidate)
 		}
 	}
 
-	return rebootList
+	return filtered
 }

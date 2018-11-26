@@ -150,6 +150,13 @@ func checkAndReboot(history map[string]candidate) {
 
 	metricRebooted.Reset()
 
+	toReboot = []candidate{
+		candidate{
+			Name: "mlab1.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
+	}
+
 	rebootMany(toReboot)
 	updateHistory(toReboot, history)
 
