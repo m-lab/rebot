@@ -158,6 +158,6 @@ func main() {
 		checkAndReboot(candidateHistory)
 
 		log.Info("Done. Going to sleep for ", defaultIntervalMins, " minutes...")
-		time.Sleep(defaultIntervalMins * time.Second)
+		time.Sleep(defaultIntervalMins * time.Minute)
 	}
 }
