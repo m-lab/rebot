@@ -70,22 +70,6 @@ var (
 	)
 )
 
-// init initializes the Prometheus metrics and drops any passed flags into
-// global variables.
-func init() {
-	historyPath = defaultHistoryPath
-	credentialsPath = defaultCredentialsPath
-	rebootCmd = defaultRebootCmd
-
-	log.SetLevel(log.DebugLevel)
-
-	flag.BoolVar(&fDryRun, "dryrun", false,
-		"Do not reboot anything, just list.")
-	flag.StringVar(&fListenAddr, "web.listen-address", ":9999",
-		"Address to listen on for telemetry.")
-	prometheus.MustRegister(metricRebooted)
-}
-
 // getCredentials reads the Prometheus API credentials from the
 // provided path.
 // It expects a two line file, with username on the first line and password
@@ -175,6 +159,22 @@ func cleanup(c chan os.Signal, history map[string]candidate) {
 func promMetrics() {
 	http.Handle("/metrics", promhttp.Handler())
 	log.Fatal(http.ListenAndServe(fListenAddr, nil))
+}
+
+// init initializes the Prometheus metrics and drops any passed flags into
+// global variables.
+func init() {
+	historyPath = defaultHistoryPath
+	credentialsPath = defaultCredentialsPath
+	rebootCmd = defaultRebootCmd
+
+	log.SetLevel(log.DebugLevel)
+
+	flag.BoolVar(&fDryRun, "dryrun", false,
+		"Do not reboot anything, just list.")
+	flag.StringVar(&fListenAddr, "web.listen-address", ":9999",
+		"Address to listen on for telemetry.")
+	prometheus.MustRegister(metricRebooted)
 }
 
 func main() {
