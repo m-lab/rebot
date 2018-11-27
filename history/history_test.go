@@ -17,10 +17,21 @@ const (
 	testHistoryPath = "history"
 )
 
-var ()
+var (
+	fakeHist = map[string]MachineHistory{
+		"mlab1.iad0t.measurement-lab.org": NewMachineHistory(
+			"mlab1.iad0t.measurement-lab.org", "iad0t", time.Now()),
+		"mlab2.iad0t.measurement-lab.org": NewMachineHistory(
+			"mlab.iad0t.measurement-lab.org", "iad0t",
+			time.Now().Add(-25*time.Hour)),
+		"mlab1.iad1t.measurement-lab.org": NewMachineHistory(
+			"mlab1.iad1t.measurement-lab.org", "iad1t",
+			time.Now().Add(-23*time.Hour)),
+	}
+)
 
 func setupCandidateHistory() {
-	json, err := json.Marshal(history)
+	json, err := json.Marshal(fakeHist)
 	rtx.Must(err, "Cannot marshal the candidates history!")
 
 	err = ioutil.WriteFile(testHistoryPath, json, 0644)
@@ -48,7 +59,7 @@ func Test_readCandidateHistory(t *testing.T) {
 		{
 			name: "success",
 			path: testHistoryPath,
-			want: history,
+			want: fakeHist,
 		},
 		{
 			name: "file not existing",
@@ -66,7 +77,7 @@ func Test_readCandidateHistory(t *testing.T) {
 	defer removeFiles(testHistoryPath, "invalidhistory")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ReadCandidateHistory(tt.path)
+			got := Read(tt.path)
 
 			// Here we use go-cmp as time.Time will not be exactly the same
 			// after marshalling/unmarshalling. In particular, the monotonic
@@ -88,7 +99,7 @@ func Test_writeCandidateHistory(t *testing.T) {
 		{
 			name:             "success",
 			path:             testHistoryPath,
-			candidateHistory: history,
+			candidateHistory: fakeHist,
 		},
 	}
 	defer removeFiles(testHistoryPath)
@@ -113,7 +124,7 @@ func Test_updateHistory(t *testing.T) {
 		healthcheck.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
 	}
 
-	testHistory := cloneHistory(history)
+	testHistory := cloneHistory(fakeHist)
 
 	t.Run("success", func(t *testing.T) {
 		Upsert(nodes, testHistory)
