@@ -33,7 +33,7 @@ func Test_rebootOne(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := rebootOne(testRebootCmd, tt.toReboot); (err != nil) != tt.wantErr {
+			if err := one(testRebootCmd, tt.toReboot); (err != nil) != tt.wantErr {
 				t.Errorf("rebootOne() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -54,7 +54,7 @@ func Test_rebootMany(t *testing.T) {
 	want := map[string]error{}
 
 	t.Run("success-all-machines-rebooted", func(t *testing.T) {
-		if got := rebootMany(testRebootCmd, toReboot); !reflect.DeepEqual(got, want) {
+		if got := Many(testRebootCmd, toReboot); !reflect.DeepEqual(got, want) {
 			t.Errorf("rebootMany() = %v, want %v", got, want)
 		}
 	})
@@ -68,7 +68,7 @@ func Test_rebootMany(t *testing.T) {
 	}
 
 	t.Run("failure-exit-code-non-zero", func(t *testing.T) {
-		got := rebootMany(testRebootCmd, toReboot)
+		got := Many(testRebootCmd, toReboot)
 		if err, ok := got["mlab4.lga0t.measurement-lab.org"]; !ok || err == nil {
 			t.Errorf("rebootMany() = %v, key not in map or err == nil", got)
 		}
