@@ -10,6 +10,11 @@ import (
 	"github.com/prometheus/common/model"
 )
 
+// PromClient is Prometheus HTTP client's interface
+type PromClient interface {
+	Query(context.Context, string, time.Time) (model.Value, error)
+}
+
 // PrometheusMockClient is a test client that returns fake values only for a
 // configurable set of queries. New queries/responses can be added by calling
 // Register(string, model.Value).

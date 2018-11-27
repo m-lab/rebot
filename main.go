@@ -16,6 +16,10 @@ import (
 	"time"
 
 	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/rebot/healthcheck"
+	"github.com/m-lab/rebot/history"
+	"github.com/m-lab/rebot/promtest"
+	"github.com/m-lab/rebot/reboot"
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,26 +33,12 @@ const (
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
 	defaultRebootCmd       = "drac.py"
-	nodeQuery              = `(label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) == 0,
-	"site", "$1", "machine", ".+?\\.(.+?)\\..+")
-unless on (machine)
-	label_replace(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) > 0,
-	"site", "$1", "machine", ".+?\\.(.+?)\\..+"))
-				unless on(machine) gmx_machine_maintenance == 1
-				unless on(site) gmx_site_maintenance == 1
-				unless on (machine) lame_duck_node == 1
-				unless on (machine) count_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) < 14
-				unless on (machine) rate(inotify_extension_create_total{ext=".s2c_snaplog"}[%[1]dm]) > 0`
-
-	// To determine if a switch is offline, pings are generally more reliable
-	// than SNMP scraping.
-	switchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
 )
 
 var (
 	config api.Config
 	client api.Client
-	prom   promClient
+	prom   promtest.PromClient
 
 	historyPath     string
 	credentialsPath string
@@ -92,6 +82,87 @@ func getCredentials(path string) (string, string) {
 	return string(bytes.Trim(username, "\n")), string(bytes.Trim(password, "\n"))
 }
 
+// filterRecent filters out nodes that were rebooted less than 24 hours ago.
+func filterRecent(candidates []healthcheck.Node, candidateHistory map[string]history.MachineHistory) []healthcheck.Node {
+	filtered := make([]healthcheck.Node, 0)
+
+	for _, candidate := range candidates {
+		history, ok := candidateHistory[candidate.Name]
+		if ok {
+			// This candidate has been down before.
+			// Check to see if the previous time was w/in the past 24 hours
+			if time.Now().Sub(history.LastReboot) > 24*time.Hour {
+				filtered = append(filtered, candidate)
+			} else {
+				log.WithFields(log.Fields{"machine": history.Name, "LastReboot": history.LastReboot}).Info("The node was rebooted recently - skipping it.")
+			}
+		} else {
+			// New candidate - just add it to the list.
+			filtered = append(filtered, candidate)
+		}
+	}
+
+	return filtered
+}
+
+// parseFlags reads the runtime flags.
+func parseFlags() {
+	flag.Parse()
+
+	if fDryRun {
+		log.Info("Dry run, no node will be rebooted and the history file will not be updated.")
+	}
+}
+
+// checkAndReboot implements Rebot's reboot logic.
+func checkAndReboot(h map[string]history.MachineHistory) {
+	// Query for offline switches
+	sites, err := healthcheck.GetOfflineSites(prom)
+	if err != nil {
+		log.Error("Unable to retrieve offline sites from Prometheus")
+		return
+	}
+
+	// Query for offline nodes
+	nodes, err := healthcheck.GetOfflineNodes(prom, defaultMins)
+	if err != nil {
+		log.Error("Unable to retrieve offline nodes from Prometheus")
+		return
+	}
+
+	offline := healthcheck.FilterOfflineSites(sites, nodes)
+	toReboot := filterRecent(offline, h)
+
+	toReboot = []healthcheck.Node{healthcheck.NewNode("mlab4.lga0t.measurement-lab.org", "lga0t")}
+	metricRebooted.Reset()
+
+	if !fDryRun {
+		reboot.Many(rebootCmd, toReboot)
+	}
+
+	for _, n := range toReboot {
+		metricRebooted.WithLabelValues(n.Name, n.Site).Set(1)
+	}
+
+	history.Upsert(toReboot, h)
+
+}
+
+// cleanup waits for a termination signal, writes the candidates' history
+// and exits.
+func cleanup(c chan os.Signal, h map[string]history.MachineHistory) {
+	<-c
+	log.Info("Cleaning up...")
+	history.Write(historyPath, h)
+	os.Exit(0)
+}
+
+// promMetrics serves Prometheus metrics over HTTP.
+func promMetrics() {
+	http.Handle("/metrics", promhttp.Handler())
+	log.Fatal(http.ListenAndServe(fListenAddr, nil))
+}
+
 // initPrometheusClient initializes a Prometheus client with HTTP basic
 // authentication. If we are running main() in a test, prom will be set
 // already, thus we won't replace it.
@@ -108,56 +179,6 @@ func initPrometheusClient() {
 
 		prom = v1.NewAPI(client)
 	}
-}
-
-// parseFlags reads the runtime flags.
-func parseFlags() {
-	flag.Parse()
-
-	if fDryRun {
-		log.Info("Dry run, no node will be rebooted and the history file will not be updated.")
-	}
-}
-
-// checkAndReboot implements Rebot's reboot logic.
-func checkAndReboot(history map[string]candidate) {
-	// Query for offline switches
-	sites, err := getOfflineSites(prom)
-	if err != nil {
-		log.Error("Unable to retrieve offline sites from Prometheus")
-		return
-	}
-
-	// Query for offline nodes
-	nodes, err := getOfflineNodes(prom, defaultMins)
-	if err != nil {
-		log.Error("Unable to retrieve offline nodes from Prometheus")
-		return
-	}
-
-	offline := filterOfflineSites(sites, nodes)
-	toReboot := filterRecent(offline, history)
-
-	metricRebooted.Reset()
-
-	rebootMany(toReboot)
-	updateHistory(toReboot, history)
-
-}
-
-// cleanup waits for a termination signal, writes the candidates' history
-// and exits.
-func cleanup(c chan os.Signal, history map[string]candidate) {
-	<-c
-	log.Info("Cleaning up...")
-	writeCandidateHistory(historyPath, history)
-	os.Exit(0)
-}
-
-// promMetrics serves Prometheus metrics over HTTP.
-func promMetrics() {
-	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(fListenAddr, nil))
 }
 
 // init initializes the Prometheus metrics and drops any passed flags into
@@ -183,7 +204,7 @@ func main() {
 
 	// First, check to see if there's an existing candidate history file
 	// and make sure we always write it back on exit.
-	candidateHistory := readCandidateHistory(historyPath)
+	candidateHistory := history.Read(historyPath)
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

@@ -1,14 +1,15 @@
 package main
 
 import (
-	"fmt"
 	"io/ioutil"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
-	"github.com/m-lab/rebot/promtest"
-	"github.com/prometheus/common/model"
+	"github.com/m-lab/rebot/history"
+
+	"github.com/m-lab/rebot/healthcheck"
 )
 
 const (
@@ -16,68 +17,6 @@ const (
 	testHistoryPath     = "history"
 	testRebootCmd       = "./drac_test.sh"
 )
-
-var (
-	fakeProm          *promtest.PrometheusMockClient
-	fakePromErr       *promtest.PrometheusMockClient
-	fakeOfflineSwitch *model.Sample
-	fakeOfflineNode   *model.Sample
-
-	offlineNodes model.Vector
-
-	testMins = 15
-
-	history = map[string]candidate{
-		"mlab1.iad0t.measurement-lab.org": candidate{
-			Name:       "mlab1.iad0t.measurement-lab.org",
-			LastReboot: time.Now(),
-		},
-		"mlab2.iad0t.measurement-lab.org": candidate{
-			Name:       "mlab2.iad0t.measurement-lab.org",
-			LastReboot: time.Now().Add(-25 * time.Hour),
-		},
-		"mlab1.iad1t.measurement-lab.org": candidate{
-			Name:       "mlab1.iad1t.measurement-lab.org",
-			LastReboot: time.Now().Add(-23 * time.Hour),
-		},
-	}
-)
-
-func init() {
-	fakeProm = promtest.NewPrometheusMockClient()
-	// This client does not have any registered query, thus it always
-	// returns an error.
-	fakePromErr = promtest.NewPrometheusMockClient()
-
-	now := model.Time(time.Now().Unix())
-
-	fakeOfflineSwitch = promtest.CreateSample(map[string]string{
-		"instance": "s1.iad0t.measurement-lab.org",
-		"job":      "blackbox-targets",
-		"module":   "icmp",
-		"site":     "iad0t",
-	}, 0, now)
-
-	var offlineSwitches = model.Vector{
-		fakeOfflineSwitch,
-	}
-
-	fakeOfflineNode = promtest.CreateSample(map[string]string{
-		"instance": "mlab1.iad0t.measurement-lab.org:806",
-		"job":      "blackbox-targets",
-		"machine":  "mlab1.iad0t.measurement-lab.org",
-		"module":   "ssh_v4_online",
-		"service":  "ssh806",
-		"site":     "iad0t",
-	}, 0, now)
-
-	offlineNodes = model.Vector{
-		fakeOfflineNode,
-	}
-
-	fakeProm.Register(switchQuery, offlineSwitches, nil)
-	fakeProm.Register(fmt.Sprintf(nodeQuery, testMins, testMins, testMins), offlineNodes, nil)
-}
 
 func setupCredentials() {
 	cred := []byte("testuser\ntestpass\n")
@@ -87,10 +26,12 @@ func setupCredentials() {
 	}
 }
 
-func teardownCredentials() {
-	err := os.Remove(testCredentialsPath)
-	if err != nil {
-		panic(err)
+func removeFiles(files ...string) {
+	for _, file := range files {
+		err := os.Remove(file)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -109,7 +50,7 @@ func Test_getCredentials(t *testing.T) {
 		},
 	}
 	setupCredentials()
-	defer teardownCredentials()
+	defer removeFiles(testCredentialsPath)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, got1 := getCredentials(tt.path)
@@ -123,22 +64,6 @@ func Test_getCredentials(t *testing.T) {
 	}
 }
 
-// TODO(roberto): make main testable again.
-// func Test_main(t *testing.T) {
-// 	setupCandidateHistory()
-// 	setupCredentials()
-// 	defer removeFiles(testHistoryPath, testCredentialsPath, "invalidhistory")
-
-// 	prom = fakeProm
-// 	historyPath = testHistoryPath
-// 	credentialsPath = testCredentialsPath
-// 	fmt.Println(switchQuery)
-// 	t.Run("success", func(t *testing.T) {
-// 		main()
-// 	})
-// 	prom = nil
-// }
-
 func Test_initPrometheusClient(t *testing.T) {
 
 	setupCredentials()
@@ -148,4 +73,66 @@ func Test_initPrometheusClient(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		initPrometheusClient()
 	})
+}
+
+func Test_filterRecent(t *testing.T) {
+
+	h := map[string]history.MachineHistory{
+		"mlab1.iad0t.measurement-lab.org": history.NewMachineHistory(
+			"mlab1.iad0t.measurement-lab.org", "iad0t", time.Now()),
+		"mlab2.iad0t.measurement-lab.org": history.NewMachineHistory(
+			"mlab.iad0t.measurement-lab.org", "iad0t",
+			time.Now().Add(-25*time.Hour)),
+		"mlab1.iad1t.measurement-lab.org": history.NewMachineHistory(
+			"mlab1.iad1t.measurement-lab.org", "iad1t",
+			time.Now().Add(-23*time.Hour)),
+	}
+
+	// Nodes where no previous reboot was present
+	noHistory := []healthcheck.Node{
+		healthcheck.NewNode("mlab2.iad1t.measurement-lab.org", "iad1t"),
+	}
+
+	// Nodes where LastReboot is before 24hrs ago.
+	rebootable := []healthcheck.Node{
+		healthcheck.NewNode("mlab2.iad0t.measurement-lab.org", "iad0t"),
+	}
+
+	// Nodes where LastReboot is within the last 24hrs.
+	notRebootable := []healthcheck.Node{
+		healthcheck.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		healthcheck.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
+	}
+	tests := []struct {
+		name             string
+		candidates       []healthcheck.Node
+		candidateHistory map[string]history.MachineHistory
+		want             []healthcheck.Node
+	}{
+		{
+			name:             "success-no-history",
+			candidates:       noHistory,
+			candidateHistory: h,
+			want:             noHistory,
+		},
+		{
+			name:             "success-rebootable",
+			candidates:       rebootable,
+			candidateHistory: h,
+			want:             rebootable,
+		},
+		{
+			name:             "success-not-rebootable",
+			candidates:       notRebootable,
+			candidateHistory: h,
+			want:             []healthcheck.Node{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := filterRecent(tt.candidates, tt.candidateHistory); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("filterRecent() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

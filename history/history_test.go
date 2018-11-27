@@ -1,4 +1,4 @@
-package main
+package history
 
 import (
 	"encoding/json"
@@ -7,9 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/rebot/healthcheck"
+
 	"github.com/google/go-cmp/cmp"
 	"github.com/m-lab/go/rtx"
 )
+
+const (
+	testHistoryPath = "history"
+)
+
+var ()
 
 func setupCandidateHistory() {
 	json, err := json.Marshal(history)
@@ -30,11 +38,12 @@ func removeFiles(files ...string) {
 		}
 	}
 }
+
 func Test_readCandidateHistory(t *testing.T) {
 	tests := []struct {
 		name string
 		path string
-		want map[string]candidate
+		want map[string]MachineHistory
 	}{
 		{
 			name: "success",
@@ -44,12 +53,12 @@ func Test_readCandidateHistory(t *testing.T) {
 		{
 			name: "file not existing",
 			path: "notfound",
-			want: map[string]candidate{},
+			want: map[string]MachineHistory{},
 		},
 		{
 			name: "invalid history",
 			path: "invalidhistory",
-			want: map[string]candidate{},
+			want: map[string]MachineHistory{},
 		},
 	}
 
@@ -57,7 +66,7 @@ func Test_readCandidateHistory(t *testing.T) {
 	defer removeFiles(testHistoryPath, "invalidhistory")
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := readCandidateHistory(tt.path)
+			got := ReadCandidateHistory(tt.path)
 
 			// Here we use go-cmp as time.Time will not be exactly the same
 			// after marshalling/unmarshalling. In particular, the monotonic
@@ -74,7 +83,7 @@ func Test_writeCandidateHistory(t *testing.T) {
 	tests := []struct {
 		name             string
 		path             string
-		candidateHistory map[string]candidate
+		candidateHistory map[string]MachineHistory
 	}{
 		{
 			name:             "success",
@@ -85,13 +94,13 @@ func Test_writeCandidateHistory(t *testing.T) {
 	defer removeFiles(testHistoryPath)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			writeCandidateHistory(tt.path, tt.candidateHistory)
+			Write(tt.path, tt.candidateHistory)
 		})
 	}
 }
 
-func cloneHistory(h map[string]candidate) map[string]candidate {
-	newHistory := map[string]candidate{}
+func cloneHistory(h map[string]MachineHistory) map[string]MachineHistory {
+	newHistory := map[string]MachineHistory{}
 	for k, v := range h {
 		newHistory[k] = v
 	}
@@ -99,21 +108,15 @@ func cloneHistory(h map[string]candidate) map[string]candidate {
 	return newHistory
 }
 func Test_updateHistory(t *testing.T) {
-	nodes := []candidate{
-		candidate{
-			Name: "mlab1.iad0t.measurement-lab.org",
-			Site: "iad0t",
-		},
-		candidate{
-			Name: "mlab1.iad1t.measurement-lab.org",
-			Site: "iad1t",
-		},
+	nodes := []healthcheck.Node{
+		healthcheck.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		healthcheck.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
 	}
 
 	testHistory := cloneHistory(history)
 
 	t.Run("success", func(t *testing.T) {
-		updateHistory(nodes, testHistory)
+		Upsert(nodes, testHistory)
 
 		// Check that LastReboot is within the last minute for nodes
 		// in the nodes slice.

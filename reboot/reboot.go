@@ -1,14 +1,18 @@
-package main
+package reboot
 
 import (
 	"os/exec"
 
+	"github.com/m-lab/rebot/healthcheck"
+
 	log "github.com/sirupsen/logrus"
 )
 
-// rebootOne reboots a single machine by calling the reboot command
+const rebootCmd = "drac.py"
+
+// one reboots a single machine by calling the reboot command
 // and returns an error if the exit status is not zero.
-func rebootOne(toReboot candidate) error {
+func one(rebootCmd string, toReboot healthcheck.Node) error {
 	cmd := exec.Command(rebootCmd, "reboot", toReboot.Name)
 	output, err := cmd.Output()
 
@@ -22,9 +26,9 @@ func rebootOne(toReboot candidate) error {
 	return nil
 }
 
-// rebootMany reboots an array of machines and returns a map of
+// Many reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
-func rebootMany(toReboot []candidate) map[string]error {
+func Many(rebootCmd string, toReboot []healthcheck.Node) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {
@@ -42,16 +46,11 @@ func rebootMany(toReboot []candidate) map[string]error {
 	log.WithFields(log.Fields{"nodes": toReboot}).Info("These nodes are going to be rebooted.")
 
 	for _, c := range toReboot {
-		log.WithFields(log.Fields{"node": c.Name, "dryrun": fDryRun}).Info("Rebooting node...")
-		if !fDryRun {
-			err := rebootOne(c)
-			if err != nil {
-				errors[c.Name] = err
-			}
+		log.WithFields(log.Fields{"node": c}).Info("Rebooting node...")
+		err := one(rebootCmd, c)
+		if err != nil {
+			errors[c.Name] = err
 		}
-
-		metricRebooted.WithLabelValues(c.Name, c.Site).Set(1)
-
 	}
 
 	return errors
