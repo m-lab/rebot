@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/m-lab/rebot/node"
 	"github.com/m-lab/rebot/promtest"
 	"github.com/prometheus/common/model"
 	log "github.com/sirupsen/logrus"
@@ -27,19 +28,6 @@ var (
 	switchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
 )
 
-// Node represents a machine on M-Lab's infrastructure
-type Node struct {
-	Name string
-	Site string
-}
-
-func NewNode(name string, site string) Node {
-	return Node{
-		Name: name,
-		Site: site,
-	}
-}
-
 // GetOfflineSites checks for offline switches in the last N minutes.
 // It returns a sitename -> Sample map.
 func GetOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error) {
@@ -60,7 +48,7 @@ func GetOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error)
 
 // GetOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
-func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]Node, error) {
+func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error) {
 	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
@@ -70,13 +58,13 @@ func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]Node, error) {
 		log.WithFields(log.Fields{"nodes": values}).Warn("Offline nodes found.")
 	}
 
-	candidates := make([]Node, 0)
+	candidates := make([]node.Node, 0)
 
 	for _, sample := range values.(model.Vector) {
 		site := sample.Metric["site"]
 		machine := sample.Metric["machine"]
 		log.Info("adding " + string(machine))
-		candidates = append(candidates, Node{
+		candidates = append(candidates, node.Node{
 			Name: string(machine),
 			Site: string(site),
 		})
@@ -85,9 +73,9 @@ func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]Node, error) {
 	return candidates, nil
 }
 
-func FilterOfflineSites(sites map[string]*model.Sample, toFilter []Node) []Node {
+func FilterOfflineSites(sites map[string]*model.Sample, toFilter []node.Node) []node.Node {
 
-	filtered := make([]Node, 0)
+	filtered := make([]node.Node, 0)
 
 	for _, c := range toFilter {
 		// Ignore machines in sites where the switch is offline.

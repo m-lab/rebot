@@ -18,6 +18,7 @@ import (
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/rebot/healthcheck"
 	"github.com/m-lab/rebot/history"
+	"github.com/m-lab/rebot/node"
 	"github.com/m-lab/rebot/promtest"
 	"github.com/m-lab/rebot/reboot"
 	"github.com/prometheus/client_golang/api"
@@ -83,8 +84,8 @@ func getCredentials(path string) (string, string) {
 }
 
 // filterRecent filters out nodes that were rebooted less than 24 hours ago.
-func filterRecent(candidates []healthcheck.Node, candidateHistory map[string]history.NodeHistory) []healthcheck.Node {
-	filtered := make([]healthcheck.Node, 0)
+func filterRecent(candidates []node.Node, candidateHistory map[string]node.History) []node.Node {
+	filtered := make([]node.Node, 0)
 
 	for _, candidate := range candidates {
 		history, ok := candidateHistory[candidate.Name]
@@ -115,7 +116,7 @@ func parseFlags() {
 }
 
 // checkAndReboot implements Rebot's reboot logic.
-func checkAndReboot(h map[string]history.NodeHistory) {
+func checkAndReboot(h map[string]node.History) {
 	// Query for offline switches
 	sites, err := healthcheck.GetOfflineSites(prom)
 	if err != nil {
@@ -133,7 +134,6 @@ func checkAndReboot(h map[string]history.NodeHistory) {
 	offline := healthcheck.FilterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, h)
 
-	toReboot = []healthcheck.Node{healthcheck.NewNode("mlab4.lga0t.measurement-lab.org", "lga0t")}
 	metricRebooted.Reset()
 
 	if !fDryRun {
@@ -150,7 +150,7 @@ func checkAndReboot(h map[string]history.NodeHistory) {
 
 // cleanup waits for a termination signal, writes the candidates' history
 // and exits.
-func cleanup(c chan os.Signal, h map[string]history.NodeHistory) {
+func cleanup(c chan os.Signal, h map[string]node.History) {
 	<-c
 	log.Info("Cleaning up...")
 	history.Write(historyPath, h)

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/rebot/healthcheck"
+	"github.com/m-lab/rebot/node"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/m-lab/go/rtx"
@@ -18,13 +18,13 @@ const (
 )
 
 var (
-	fakeHist = map[string]NodeHistory{
-		"mlab1.iad0t.measurement-lab.org": NewNodeHistory(
+	fakeHist = map[string]node.History{
+		"mlab1.iad0t.measurement-lab.org": node.NewHistory(
 			"mlab1.iad0t.measurement-lab.org", "iad0t", time.Now()),
-		"mlab2.iad0t.measurement-lab.org": NewNodeHistory(
+		"mlab2.iad0t.measurement-lab.org": node.NewHistory(
 			"mlab.iad0t.measurement-lab.org", "iad0t",
 			time.Now().Add(-25*time.Hour)),
-		"mlab1.iad1t.measurement-lab.org": NewNodeHistory(
+		"mlab1.iad1t.measurement-lab.org": node.NewHistory(
 			"mlab1.iad1t.measurement-lab.org", "iad1t",
 			time.Now().Add(-23*time.Hour)),
 	}
@@ -54,7 +54,7 @@ func Test_readCandidateHistory(t *testing.T) {
 	tests := []struct {
 		name string
 		path string
-		want map[string]NodeHistory
+		want map[string]node.History
 	}{
 		{
 			name: "success",
@@ -64,12 +64,12 @@ func Test_readCandidateHistory(t *testing.T) {
 		{
 			name: "file not existing",
 			path: "notfound",
-			want: map[string]NodeHistory{},
+			want: map[string]node.History{},
 		},
 		{
 			name: "invalid history",
 			path: "invalidhistory",
-			want: map[string]NodeHistory{},
+			want: map[string]node.History{},
 		},
 	}
 
@@ -94,7 +94,7 @@ func Test_writeCandidateHistory(t *testing.T) {
 	tests := []struct {
 		name             string
 		path             string
-		candidateHistory map[string]NodeHistory
+		candidateHistory map[string]node.History
 	}{
 		{
 			name:             "success",
@@ -110,8 +110,8 @@ func Test_writeCandidateHistory(t *testing.T) {
 	}
 }
 
-func cloneHistory(h map[string]NodeHistory) map[string]NodeHistory {
-	newHistory := map[string]NodeHistory{}
+func cloneHistory(h map[string]node.History) map[string]node.History {
+	newHistory := map[string]node.History{}
 	for k, v := range h {
 		newHistory[k] = v
 	}
@@ -119,9 +119,9 @@ func cloneHistory(h map[string]NodeHistory) map[string]NodeHistory {
 	return newHistory
 }
 func Test_updateHistory(t *testing.T) {
-	nodes := []healthcheck.Node{
-		healthcheck.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
-		healthcheck.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
+	nodes := []node.Node{
+		node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		node.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
 	}
 
 	testHistory := cloneHistory(fakeHist)

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/rebot/node"
 	"github.com/m-lab/rebot/promtest"
 
 	"github.com/prometheus/common/model"
@@ -97,15 +98,15 @@ func Test_getOfflineNodes(t *testing.T) {
 		name    string
 		prom    promtest.PromClient
 		minutes int
-		want    []Node
+		want    []node.Node
 		wantErr bool
 	}{
 		{
 			name:    "success",
 			prom:    fakeProm,
 			minutes: testMins,
-			want: []Node{
-				NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+			want: []node.Node{
+				node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
 			},
 		},
 		{
@@ -131,15 +132,15 @@ func Test_getOfflineNodes(t *testing.T) {
 
 func Test_filterOfflineSites(t *testing.T) {
 
-	candidates := []Node{
-		NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+	candidates := []node.Node{
+		node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
 	}
 
 	tests := []struct {
 		name       string
 		sites      map[string]*model.Sample
-		candidates []Node
-		want       []Node
+		candidates []node.Node
+		want       []node.Node
 	}{
 		{
 			name: "success-filtered-node-when-site-offline",
@@ -147,7 +148,7 @@ func Test_filterOfflineSites(t *testing.T) {
 				"iad0t": fakeOfflineSwitch,
 			},
 			candidates: candidates,
-			want:       []Node{},
+			want:       []node.Node{},
 		},
 		{
 			name: "success-offline-node-returned",
@@ -155,8 +156,8 @@ func Test_filterOfflineSites(t *testing.T) {
 				"iad1t": fakeOfflineSwitch,
 			},
 			candidates: candidates,
-			want: []Node{
-				NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+			want: []node.Node{
+				node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
 			},
 		},
 	}

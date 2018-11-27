@@ -7,9 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/rebot/history"
-
-	"github.com/m-lab/rebot/healthcheck"
+	"github.com/m-lab/rebot/node"
 )
 
 const (
@@ -77,37 +75,37 @@ func Test_initPrometheusClient(t *testing.T) {
 
 func Test_filterRecent(t *testing.T) {
 
-	h := map[string]history.NodeHistory{
-		"mlab1.iad0t.measurement-lab.org": history.NewNodeHistory(
+	h := map[string]node.History{
+		"mlab1.iad0t.measurement-lab.org": node.NewHistory(
 			"mlab1.iad0t.measurement-lab.org", "iad0t", time.Now()),
-		"mlab2.iad0t.measurement-lab.org": history.NewNodeHistory(
+		"mlab2.iad0t.measurement-lab.org": node.NewHistory(
 			"mlab.iad0t.measurement-lab.org", "iad0t",
 			time.Now().Add(-25*time.Hour)),
-		"mlab1.iad1t.measurement-lab.org": history.NewNodeHistory(
+		"mlab1.iad1t.measurement-lab.org": node.NewHistory(
 			"mlab1.iad1t.measurement-lab.org", "iad1t",
 			time.Now().Add(-23*time.Hour)),
 	}
 
 	// Nodes where no previous reboot was present
-	noHistory := []healthcheck.Node{
-		healthcheck.NewNode("mlab2.iad1t.measurement-lab.org", "iad1t"),
+	noHistory := []node.Node{
+		node.NewNode("mlab2.iad1t.measurement-lab.org", "iad1t"),
 	}
 
 	// Nodes where LastReboot is before 24hrs ago.
-	rebootable := []healthcheck.Node{
-		healthcheck.NewNode("mlab2.iad0t.measurement-lab.org", "iad0t"),
+	rebootable := []node.Node{
+		node.NewNode("mlab2.iad0t.measurement-lab.org", "iad0t"),
 	}
 
 	// Nodes where LastReboot is within the last 24hrs.
-	notRebootable := []healthcheck.Node{
-		healthcheck.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
-		healthcheck.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
+	notRebootable := []node.Node{
+		node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		node.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
 	}
 	tests := []struct {
 		name             string
-		candidates       []healthcheck.Node
-		candidateHistory map[string]history.NodeHistory
-		want             []healthcheck.Node
+		candidates       []node.Node
+		candidateHistory map[string]node.History
+		want             []node.Node
 	}{
 		{
 			name:             "success-no-history",
@@ -125,7 +123,7 @@ func Test_filterRecent(t *testing.T) {
 			name:             "success-not-rebootable",
 			candidates:       notRebootable,
 			candidateHistory: h,
-			want:             []healthcheck.Node{},
+			want:             []node.Node{},
 		},
 	}
 	for _, tt := range tests {

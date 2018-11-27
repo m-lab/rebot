@@ -3,8 +3,7 @@ package reboot
 import (
 	"os/exec"
 
-	"github.com/m-lab/rebot/healthcheck"
-
+	"github.com/m-lab/rebot/node"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -12,7 +11,7 @@ const rebootCmd = "drac.py"
 
 // one reboots a single machine by calling the reboot command
 // and returns an error if the exit status is not zero.
-func one(rebootCmd string, toReboot healthcheck.Node) error {
+func one(rebootCmd string, toReboot node.Node) error {
 	cmd := exec.Command(rebootCmd, "reboot", toReboot.Name)
 	output, err := cmd.Output()
 
@@ -28,7 +27,7 @@ func one(rebootCmd string, toReboot healthcheck.Node) error {
 
 // Many reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
-func Many(rebootCmd string, toReboot []healthcheck.Node) map[string]error {
+func Many(rebootCmd string, toReboot []node.Node) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {

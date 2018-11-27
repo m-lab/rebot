@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/m-lab/rebot/healthcheck"
+	"github.com/m-lab/rebot/node"
 )
 
 const testRebootCmd = "./drac_test.sh"
@@ -12,19 +12,19 @@ const testRebootCmd = "./drac_test.sh"
 func Test_rebootOne(t *testing.T) {
 	tests := []struct {
 		name     string
-		toReboot healthcheck.Node
+		toReboot node.Node
 		wantErr  bool
 	}{
 		{
 			name: "success-exit-status-zero",
-			toReboot: healthcheck.Node{
+			toReboot: node.Node{
 				Name: "mlab1.lga0t.measurement-lab.org",
 				Site: "lga0t",
 			},
 		},
 		{
 			name: "failure-exit-status-not-zero",
-			toReboot: healthcheck.Node{
+			toReboot: node.Node{
 				Name: "mlab4.lga0t.measurement-lab.org",
 				Site: "lga0t",
 			},
@@ -41,12 +41,12 @@ func Test_rebootOne(t *testing.T) {
 }
 
 func Test_rebootMany(t *testing.T) {
-	toReboot := []healthcheck.Node{
-		healthcheck.Node{
+	toReboot := []node.Node{
+		node.Node{
 			Name: "mlab1.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
-		healthcheck.Node{
+		node.Node{
 			Name: "mlab2.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
@@ -60,8 +60,8 @@ func Test_rebootMany(t *testing.T) {
 	})
 
 	// mlab4.* machines always returns a non-zero exit code in drac_test.sh.
-	toReboot = []healthcheck.Node{
-		healthcheck.Node{
+	toReboot = []node.Node{
+		node.Node{
 			Name: "mlab4.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
