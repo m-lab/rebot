@@ -77,13 +77,13 @@ func Test_initPrometheusClient(t *testing.T) {
 
 func Test_filterRecent(t *testing.T) {
 
-	h := map[string]history.MachineHistory{
-		"mlab1.iad0t.measurement-lab.org": history.NewMachineHistory(
+	h := map[string]history.NodeHistory{
+		"mlab1.iad0t.measurement-lab.org": history.NewNodeHistory(
 			"mlab1.iad0t.measurement-lab.org", "iad0t", time.Now()),
-		"mlab2.iad0t.measurement-lab.org": history.NewMachineHistory(
+		"mlab2.iad0t.measurement-lab.org": history.NewNodeHistory(
 			"mlab.iad0t.measurement-lab.org", "iad0t",
 			time.Now().Add(-25*time.Hour)),
-		"mlab1.iad1t.measurement-lab.org": history.NewMachineHistory(
+		"mlab1.iad1t.measurement-lab.org": history.NewNodeHistory(
 			"mlab1.iad1t.measurement-lab.org", "iad1t",
 			time.Now().Add(-23*time.Hour)),
 	}
@@ -106,7 +106,7 @@ func Test_filterRecent(t *testing.T) {
 	tests := []struct {
 		name             string
 		candidates       []healthcheck.Node
-		candidateHistory map[string]history.MachineHistory
+		candidateHistory map[string]history.NodeHistory
 		want             []healthcheck.Node
 	}{
 		{

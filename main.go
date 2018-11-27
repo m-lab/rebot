@@ -83,7 +83,7 @@ func getCredentials(path string) (string, string) {
 }
 
 // filterRecent filters out nodes that were rebooted less than 24 hours ago.
-func filterRecent(candidates []healthcheck.Node, candidateHistory map[string]history.MachineHistory) []healthcheck.Node {
+func filterRecent(candidates []healthcheck.Node, candidateHistory map[string]history.NodeHistory) []healthcheck.Node {
 	filtered := make([]healthcheck.Node, 0)
 
 	for _, candidate := range candidates {
@@ -115,7 +115,7 @@ func parseFlags() {
 }
 
 // checkAndReboot implements Rebot's reboot logic.
-func checkAndReboot(h map[string]history.MachineHistory) {
+func checkAndReboot(h map[string]history.NodeHistory) {
 	// Query for offline switches
 	sites, err := healthcheck.GetOfflineSites(prom)
 	if err != nil {
@@ -150,7 +150,7 @@ func checkAndReboot(h map[string]history.MachineHistory) {
 
 // cleanup waits for a termination signal, writes the candidates' history
 // and exits.
-func cleanup(c chan os.Signal, h map[string]history.MachineHistory) {
+func cleanup(c chan os.Signal, h map[string]history.NodeHistory) {
 	<-c
 	log.Info("Cleaning up...")
 	history.Write(historyPath, h)

@@ -11,16 +11,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// MachineHistory holds the history of a machine's outages
-type MachineHistory struct {
+// NodeHistory holds the history of a machine's outages
+type NodeHistory struct {
 	Name       string
 	Site       string
 	LastReboot time.Time
 }
 
-// NewMachineHistory returns a new machineHistory.
-func NewMachineHistory(name string, site string, lastReboot time.Time) MachineHistory {
-	return MachineHistory{
+// NewNodeHistory returns a new machineHistory.
+func NewNodeHistory(name string, site string, lastReboot time.Time) NodeHistory {
+	return NodeHistory{
 		Name:       name,
 		Site:       site,
 		LastReboot: lastReboot,
@@ -30,20 +30,20 @@ func NewMachineHistory(name string, site string, lastReboot time.Time) MachineHi
 // Read reads a JSON file containing a map of
 // string -> candidate. If the file cannot be read or deserialized, it returns
 // an empty map.
-func Read(path string) map[string]MachineHistory {
-	var candidateHistory map[string]MachineHistory
+func Read(path string) map[string]NodeHistory {
+	var candidateHistory map[string]NodeHistory
 	file, err := ioutil.ReadFile(path)
 
 	if err != nil {
 		// There is no existing candidate history file -> return empty map.
-		return make(map[string]MachineHistory)
+		return make(map[string]NodeHistory)
 	}
 
 	err = json.Unmarshal(file, &candidateHistory)
 
 	if err != nil {
 		log.Warn("Cannot unmarshal the candidates' history file - ignoring it. ", err)
-		return make(map[string]MachineHistory)
+		return make(map[string]NodeHistory)
 	}
 
 	return candidateHistory
@@ -51,7 +51,7 @@ func Read(path string) map[string]MachineHistory {
 
 // Write serializes a string -> candidate map to a JSON file.
 // If the map cannot be serialized or the file cannot be written, it exits.
-func Write(path string, candidateHistory map[string]MachineHistory) {
+func Write(path string, candidateHistory map[string]NodeHistory) {
 	newCandidates, err := json.Marshal(candidateHistory)
 	rtx.Must(err, "Cannot marshal the candidates history!")
 
@@ -62,7 +62,7 @@ func Write(path string, candidateHistory map[string]MachineHistory) {
 // Upsert updates the LastReboot field for all the candidates named in
 // the nodes slice. If a candidate did not previously exist, it creates a
 // new one.
-func Upsert(candidates []healthcheck.Node, history map[string]MachineHistory) {
+func Upsert(candidates []healthcheck.Node, history map[string]NodeHistory) {
 	if len(candidates) == 0 {
 		return
 	}
@@ -74,7 +74,7 @@ func Upsert(candidates []healthcheck.Node, history map[string]MachineHistory) {
 			el.LastReboot = time.Now()
 			history[c.Name] = el
 		} else {
-			history[c.Name] = NewMachineHistory(c.Name, c.Site, time.Now())
+			history[c.Name] = NewNodeHistory(c.Name, c.Site, time.Now())
 		}
 	}
 

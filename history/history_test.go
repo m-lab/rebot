@@ -18,13 +18,13 @@ const (
 )
 
 var (
-	fakeHist = map[string]MachineHistory{
-		"mlab1.iad0t.measurement-lab.org": NewMachineHistory(
+	fakeHist = map[string]NodeHistory{
+		"mlab1.iad0t.measurement-lab.org": NewNodeHistory(
 			"mlab1.iad0t.measurement-lab.org", "iad0t", time.Now()),
-		"mlab2.iad0t.measurement-lab.org": NewMachineHistory(
+		"mlab2.iad0t.measurement-lab.org": NewNodeHistory(
 			"mlab.iad0t.measurement-lab.org", "iad0t",
 			time.Now().Add(-25*time.Hour)),
-		"mlab1.iad1t.measurement-lab.org": NewMachineHistory(
+		"mlab1.iad1t.measurement-lab.org": NewNodeHistory(
 			"mlab1.iad1t.measurement-lab.org", "iad1t",
 			time.Now().Add(-23*time.Hour)),
 	}
@@ -54,7 +54,7 @@ func Test_readCandidateHistory(t *testing.T) {
 	tests := []struct {
 		name string
 		path string
-		want map[string]MachineHistory
+		want map[string]NodeHistory
 	}{
 		{
 			name: "success",
@@ -64,12 +64,12 @@ func Test_readCandidateHistory(t *testing.T) {
 		{
 			name: "file not existing",
 			path: "notfound",
-			want: map[string]MachineHistory{},
+			want: map[string]NodeHistory{},
 		},
 		{
 			name: "invalid history",
 			path: "invalidhistory",
-			want: map[string]MachineHistory{},
+			want: map[string]NodeHistory{},
 		},
 	}
 
@@ -94,7 +94,7 @@ func Test_writeCandidateHistory(t *testing.T) {
 	tests := []struct {
 		name             string
 		path             string
-		candidateHistory map[string]MachineHistory
+		candidateHistory map[string]NodeHistory
 	}{
 		{
 			name:             "success",
@@ -110,8 +110,8 @@ func Test_writeCandidateHistory(t *testing.T) {
 	}
 }
 
-func cloneHistory(h map[string]MachineHistory) map[string]MachineHistory {
-	newHistory := map[string]MachineHistory{}
+func cloneHistory(h map[string]NodeHistory) map[string]NodeHistory {
+	newHistory := map[string]NodeHistory{}
 	for k, v := range h {
 		newHistory[k] = v
 	}
