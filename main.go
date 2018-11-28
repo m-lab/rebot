@@ -44,11 +44,10 @@ var (
 	historyPath     string
 	credentialsPath string
 	rebootCmd       string
-	oneshot         bool
 
-	fDryRun     bool
-	fOneshot    bool
-	fListenAddr string
+	dryRun     bool
+	oneshot    bool
+	listenAddr string
 
 	// Prometheus metric for exposing number of rebooted machines on last run.
 	metricRebooted = prometheus.NewGaugeVec(
@@ -112,12 +111,8 @@ func filterRecent(candidates []node.Node, candidateHistory map[string]node.Histo
 func parseFlags() {
 	flag.Parse()
 
-	if fDryRun {
+	if dryRun {
 		log.Info("Dry run, no node will be rebooted and the history file will not be updated.")
-	}
-
-	if fOneshot {
-		oneshot = true
 	}
 }
 
@@ -141,7 +136,7 @@ func checkAndReboot(h map[string]node.History) {
 
 	metricRebooted.Reset()
 
-	if !fDryRun {
+	if !dryRun {
 		reboot.Many(rebootCmd, toReboot)
 	}
 
@@ -163,7 +158,7 @@ func cleanup(h map[string]node.History) {
 // promMetrics serves Prometheus metrics over HTTP.
 func promMetrics() {
 	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(fListenAddr, nil))
+	log.Fatal(http.ListenAndServe(listenAddr, nil))
 }
 
 // initPrometheusClient initializes a Prometheus client with HTTP basic
@@ -193,11 +188,11 @@ func init() {
 
 	log.SetLevel(log.DebugLevel)
 
-	flag.BoolVar(&fDryRun, "dryrun", false,
+	flag.BoolVar(&dryRun, "dryrun", false,
 		"Do not reboot anything, just list.")
-	flag.BoolVar(&fOneshot, "oneshot", false,
+	flag.BoolVar(&oneshot, "oneshot", false,
 		"Execute just once, do not loop.")
-	flag.StringVar(&fListenAddr, "web.listen-address", ":9999",
+	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
 	prometheus.MustRegister(metricRebooted)
 }

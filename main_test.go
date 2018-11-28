@@ -13,6 +13,7 @@ import (
 	"github.com/m-lab/rebot/node"
 	"github.com/m-lab/rebot/promtest"
 	"github.com/prometheus/common/model"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -66,7 +67,7 @@ func setupCredentials() {
 	cred := []byte("testuser\ntestpass\n")
 	err := ioutil.WriteFile(testCredentialsPath, cred, 0644)
 	if err != nil {
-		panic(err)
+		log.Fatalln(err)
 	}
 }
 
@@ -74,7 +75,7 @@ func removeFiles(files ...string) {
 	for _, file := range files {
 		err := os.Remove(file)
 		if err != nil {
-			panic(err)
+			log.Fatalln(err)
 		}
 	}
 }

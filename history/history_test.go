@@ -3,6 +3,7 @@ package history
 import (
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"os"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func removeFiles(files ...string) {
 	for _, file := range files {
 		err := os.Remove(file)
 		if err != nil {
-			panic(err)
+			log.Fatalln(err)
 		}
 	}
 }
