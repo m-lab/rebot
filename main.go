@@ -190,6 +190,7 @@ func init() {
 		"Execute just once, do not loop.")
 	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
+
 	prometheus.MustRegister(metricRebooted)
 }
 

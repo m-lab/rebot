@@ -8,7 +8,6 @@ import (
 
 	"github.com/m-lab/rebot/node"
 	"github.com/m-lab/rebot/promtest"
-
 	"github.com/prometheus/common/model"
 )
 
@@ -56,7 +55,7 @@ func init() {
 	}
 
 	fakeProm.Register(SwitchQuery, offlineSwitches, nil)
-	fakeProm.Register(fmt.Sprintf(NodeQuery, testMins, testMins, testMins), offlineNodes, nil)
+	fakeProm.Register(fmt.Sprintf(NodeQuery, testMins), offlineNodes, nil)
 }
 
 func Test_getOfflineSites(t *testing.T) {
@@ -168,4 +167,44 @@ func Test_filterOfflineSites(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetRebootable(t *testing.T) {
+
+	t.Run("success", func(t *testing.T) {
+		got, err := GetRebootable(fakeProm, testMins)
+
+		if err != nil {
+			t.Errorf("GetRebootable() error = %v, wantErr %v", err, false)
+			return
+		}
+
+		if !reflect.DeepEqual(got, []node.Node{}) {
+			t.Errorf("GetRebootable() = %v, want %v", got, []node.Node{})
+		}
+	})
+
+	t.Run("error-retrieving-sites", func(t *testing.T) {
+		_, err := GetRebootable(fakePromErr, testMins)
+
+		if err == nil {
+			t.Errorf("GetRebootable() error = %v, wantErr %v", err, true)
+			return
+		}
+	})
+
+	// Unregister nodes query from the fake client
+	restore := fakeProm.Unregister(fmt.Sprintf(NodeQuery, testMins))
+
+	t.Run("error-retrieving-nodes", func(t *testing.T) {
+		_, err := GetRebootable(fakeProm, testMins)
+
+		if err == nil {
+			t.Errorf("GetRebootable() error = %v, wantErr %v", err, true)
+			return
+		}
+	})
+
+	restore()
+
 }

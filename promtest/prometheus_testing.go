@@ -42,6 +42,19 @@ func (p *PrometheusMockClient) Register(q string, resp model.Value, err error) {
 	}
 }
 
+// Unregister removes a mapped query and returns a function to add it back.
+func (p *PrometheusMockClient) Unregister(q string) func() {
+	v, ok := p.responses[q]
+	if ok {
+		delete(p.responses, q)
+		return func() {
+			p.Register(q, v.value, v.err)
+		}
+	}
+
+	return func() {}
+}
+
 // CreateSample returns a reference to a new model.Sample having labels, value
 // and timestamp passed as arguments.
 func CreateSample(labels map[string]string, value float64, t model.Time) *model.Sample {
