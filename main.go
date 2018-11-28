@@ -60,6 +60,8 @@ var (
 			"site",
 		},
 	)
+
+	ctx, cancel = context.WithCancel(context.Background())
 )
 
 // getCredentials reads the Prometheus API credentials from the
@@ -202,7 +204,6 @@ func main() {
 	// and make sure we always write it back on exit.
 	candidateHistory := history.Read(historyPath)
 
-	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	for {
