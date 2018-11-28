@@ -55,8 +55,8 @@ func init() {
 		fakeOfflineNode,
 	}
 
-	fakeProm.Register(switchQuery, offlineSwitches, nil)
-	fakeProm.Register(fmt.Sprintf(nodeQuery, testMins, testMins, testMins), offlineNodes, nil)
+	fakeProm.Register(SwitchQuery, offlineSwitches, nil)
+	fakeProm.Register(fmt.Sprintf(NodeQuery, testMins, testMins, testMins), offlineNodes, nil)
 }
 
 func Test_getOfflineSites(t *testing.T) {

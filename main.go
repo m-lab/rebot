@@ -44,8 +44,10 @@ var (
 	historyPath     string
 	credentialsPath string
 	rebootCmd       string
+	oneshot         bool
 
 	fDryRun     bool
+	fOneshot    bool
 	fListenAddr string
 
 	// Prometheus metric for exposing number of rebooted machines on last run.
@@ -113,6 +115,16 @@ func parseFlags() {
 	if fDryRun {
 		log.Info("Dry run, no node will be rebooted and the history file will not be updated.")
 	}
+
+	if fOneshot {
+		oneshot = true
+	}
+}
+
+func readEnv() {
+	if os.Getenv("REBOT_ONESHOT") == "1" {
+		oneshot = true
+	}
 }
 
 // checkAndReboot implements Rebot's reboot logic.
@@ -150,11 +162,9 @@ func checkAndReboot(h map[string]node.History) {
 
 // cleanup waits for a termination signal, writes the candidates' history
 // and exits.
-func cleanup(c chan os.Signal, h map[string]node.History) {
-	<-c
+func cleanup(h map[string]node.History) {
 	log.Info("Cleaning up...")
 	history.Write(historyPath, h)
-	os.Exit(0)
 }
 
 // promMetrics serves Prometheus metrics over HTTP.
@@ -192,13 +202,17 @@ func init() {
 
 	flag.BoolVar(&fDryRun, "dryrun", false,
 		"Do not reboot anything, just list.")
+	flag.BoolVar(&fOneshot, "oneshot", false,
+		"Execute just once, do not loop.")
 	flag.StringVar(&fListenAddr, "web.listen-address", ":9999",
 		"Address to listen on for telemetry.")
 	prometheus.MustRegister(metricRebooted)
 }
 
 func main() {
+	readEnv()
 	parseFlags()
+
 	initPrometheusClient()
 	go promMetrics()
 
@@ -208,10 +222,19 @@ func main() {
 
 	c := make(chan os.Signal)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go cleanup(c, candidateHistory)
+	go func() {
+		<-c
+		cleanup(candidateHistory)
+	}()
 
 	for {
 		checkAndReboot(candidateHistory)
+
+		if oneshot {
+			log.Info("Done.")
+			cleanup(candidateHistory)
+			os.Exit(0)
+		}
 
 		log.Info("Done. Going to sleep for ", defaultIntervalMins, " minutes...")
 		time.Sleep(defaultIntervalMins * time.Minute)

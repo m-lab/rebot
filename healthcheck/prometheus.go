@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	nodeQuery = `(label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) == 0,
+	NodeQuery = `(label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) == 0,
 	"site", "$1", "machine", ".+?\\.(.+?)\\..+")
 	unless on (machine)
 	label_replace(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) > 0,
@@ -25,7 +25,7 @@ var (
 
 	// To determine if a switch is offline, pings are generally more reliable
 	// than SNMP scraping.
-	switchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
+	SwitchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
 )
 
 // GetOfflineSites checks for offline switches in the last N minutes.
@@ -33,7 +33,7 @@ var (
 func GetOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error) {
 	offline := make(map[string]*model.Sample)
 
-	values, err := prom.Query(context.Background(), switchQuery, time.Now())
+	values, err := prom.Query(context.Background(), SwitchQuery, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +49,7 @@ func GetOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error)
 // GetOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
 func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error) {
-	values, err := prom.Query(context.Background(), fmt.Sprintf(nodeQuery, minutes), time.Now())
+	values, err := prom.Query(context.Background(), fmt.Sprintf(NodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
 	}

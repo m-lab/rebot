@@ -1,14 +1,60 @@
 package main
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/m-lab/go/osx"
+	"github.com/m-lab/rebot/healthcheck"
 	"github.com/m-lab/rebot/node"
+	"github.com/m-lab/rebot/promtest"
+	"github.com/prometheus/common/model"
 )
+
+const (
+	testMins = 15
+)
+
+var (
+	fakeProm *promtest.PrometheusMockClient
+)
+
+func init() {
+	now := model.Time(time.Now().Unix())
+	fakeProm = promtest.NewPrometheusMockClient()
+	fakeOfflineSwitch := promtest.CreateSample(map[string]string{
+		"instance": "s1.iad0t.measurement-lab.org",
+		"job":      "blackbox-targets",
+		"module":   "icmp",
+		"site":     "iad0t",
+	}, 0, now)
+
+	offlineSwitches := model.Vector{
+		fakeOfflineSwitch,
+	}
+
+	fakeOfflineNode := promtest.CreateSample(map[string]string{
+		"instance": "mlab1.iad0t.measurement-lab.org:806",
+		"job":      "blackbox-targets",
+		"machine":  "mlab1.iad0t.measurement-lab.org",
+		"module":   "ssh_v4_online",
+		"service":  "ssh806",
+		"site":     "iad0t",
+	}, 0, now)
+
+	offlineNodes := model.Vector{
+		fakeOfflineNode,
+	}
+
+	fakeProm.Register(healthcheck.SwitchQuery, offlineSwitches, nil)
+	fakeProm.Register(fmt.Sprintf(healthcheck.NodeQuery, testMins), offlineNodes, nil)
+
+	prom = fakeProm
+}
 
 const (
 	testCredentialsPath = "credentials"
@@ -133,4 +179,13 @@ func Test_filterRecent(t *testing.T) {
 			}
 		})
 	}
+}
+
+func Test_main(t *testing.T) {
+	restore := osx.MustSetenv("REBOT_ONESHOT", "1")
+	t.Run("success-main", func(t *testing.T) {
+		main()
+	})
+
+	restore()
 }
