@@ -233,7 +233,7 @@ func main() {
 		if oneshot {
 			log.Info("Done.")
 			cleanup(candidateHistory)
-			os.Exit(0)
+			return
 		}
 
 		log.Info("Done. Going to sleep for ", defaultIntervalMins, " minutes...")
