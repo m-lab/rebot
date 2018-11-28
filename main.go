@@ -129,21 +129,14 @@ func readEnv() {
 
 // checkAndReboot implements Rebot's reboot logic.
 func checkAndReboot(h map[string]node.History) {
-	// Query for offline switches
-	sites, err := healthcheck.GetOfflineSites(prom)
+	offline, err := healthcheck.GetRebootable(prom, defaultMins)
+
 	if err != nil {
-		log.Error("Unable to retrieve offline sites from Prometheus")
+		log.Error("Unable to retrieve the list of rebootable nodes. " +
+			"Is Prometheus reachable?")
 		return
 	}
 
-	// Query for offline nodes
-	nodes, err := healthcheck.GetOfflineNodes(prom, defaultMins)
-	if err != nil {
-		log.Error("Unable to retrieve offline nodes from Prometheus")
-		return
-	}
-
-	offline := healthcheck.FilterOfflineSites(sites, nodes)
 	toReboot := filterRecent(offline, h)
 
 	metricRebooted.Reset()
@@ -225,6 +218,7 @@ func main() {
 	go func() {
 		<-c
 		cleanup(candidateHistory)
+		os.Exit(0)
 	}()
 
 	for {

@@ -28,9 +28,9 @@ var (
 	SwitchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
 )
 
-// GetOfflineSites checks for offline switches in the last N minutes.
+// getOfflineSites checks for offline switches in the last N minutes.
 // It returns a sitename -> Sample map.
-func GetOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error) {
+func getOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error) {
 	offline := make(map[string]*model.Sample)
 
 	values, err := prom.Query(context.Background(), SwitchQuery, time.Now())
@@ -46,9 +46,9 @@ func GetOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error)
 	return offline, err
 }
 
-// GetOfflineNodes checks for offline nodes in the last N minutes.
+// getOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
-func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error) {
+func getOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error) {
 	values, err := prom.Query(context.Background(), fmt.Sprintf(NodeQuery, minutes), time.Now())
 	if err != nil {
 		return nil, err
@@ -73,7 +73,7 @@ func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error)
 	return candidates, nil
 }
 
-func FilterOfflineSites(sites map[string]*model.Sample, toFilter []node.Node) []node.Node {
+func filterOfflineSites(sites map[string]*model.Sample, toFilter []node.Node) []node.Node {
 
 	filtered := make([]node.Node, 0)
 
@@ -89,4 +89,23 @@ func FilterOfflineSites(sites map[string]*model.Sample, toFilter []node.Node) []
 	}
 
 	return filtered
+}
+
+func GetRebootable(prom promtest.PromClient, minutes int) ([]node.Node, error) {
+	// Query for offline switches
+	sites, err := getOfflineSites(prom)
+	if err != nil {
+		log.Error("Unable to retrieve offline sites from Prometheus")
+		return nil, err
+	}
+
+	// Query for offline nodes
+	nodes, err := getOfflineNodes(prom, minutes)
+	if err != nil {
+		log.Error("Unable to retrieve offline nodes from Prometheus")
+		return nil, err
+	}
+
+	offline := filterOfflineSites(sites, nodes)
+	return offline, nil
 }

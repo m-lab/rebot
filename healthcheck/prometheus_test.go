@@ -81,7 +81,7 @@ func Test_getOfflineSites(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetOfflineSites(tt.prom)
+			got, err := getOfflineSites(tt.prom)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getOfflineSites() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -118,7 +118,7 @@ func Test_getOfflineNodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetOfflineNodes(tt.prom, tt.minutes)
+			got, err := getOfflineNodes(tt.prom, tt.minutes)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getOfflineNodes() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -163,7 +163,7 @@ func Test_filterOfflineSites(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := FilterOfflineSites(tt.sites, tt.candidates); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
+			if got := filterOfflineSites(tt.sites, tt.candidates); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("filterOfflineSites() = %v, want %v", got, tt.want)
 			}
 		})
