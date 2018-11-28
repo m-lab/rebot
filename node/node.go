@@ -16,7 +16,7 @@ type History struct {
 	LastReboot time.Time
 }
 
-func NewNode(name string, site string) Node {
+func New(name string, site string) Node {
 	return Node{
 		Name: name,
 		Site: site,
@@ -26,7 +26,7 @@ func NewNode(name string, site string) Node {
 // NewNodeHistory returns a new NodeHistory.
 func NewHistory(name string, site string, lastReboot time.Time) History {
 	return History{
-		NewNode(name, site),
+		New(name, site),
 		lastReboot,
 	}
 }
