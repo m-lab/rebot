@@ -184,9 +184,8 @@ func Test_filterRecent(t *testing.T) {
 
 func Test_main(t *testing.T) {
 	restore := osx.MustSetenv("REBOT_ONESHOT", "1")
+	defer restore()
 	t.Run("success-oneshot", func(t *testing.T) {
 		main()
 	})
-
-	restore()
 }
