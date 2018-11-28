@@ -8,11 +8,11 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"flag"
+	"math/rand"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
 	"github.com/m-lab/go/rtx"
@@ -145,14 +145,8 @@ func checkAndReboot(h map[string]node.History) {
 	}
 
 	history.Upsert(toReboot, h)
+	history.Write(defaultHistoryPath, h)
 
-}
-
-// cleanup waits for a termination signal, writes the candidates' history
-// and exits.
-func cleanup(h map[string]node.History) {
-	log.Info("Cleaning up...")
-	history.Write(historyPath, h)
 }
 
 // promMetrics serves Prometheus metrics over HTTP.
@@ -208,24 +202,24 @@ func main() {
 	// and make sure we always write it back on exit.
 	candidateHistory := history.Read(historyPath)
 
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		cleanup(candidateHistory)
-		os.Exit(0)
-	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	sleepTime := time.Duration(rand.ExpFloat64()*float64(defaultIntervalMins)) * time.Second
 
 	for {
 		checkAndReboot(candidateHistory)
-
 		if oneshot {
-			log.Info("Done.")
-			cleanup(candidateHistory)
-			return
+			cancel()
 		}
 
 		log.Info("Done. Going to sleep for ", defaultIntervalMins, " minutes...")
-		time.Sleep(defaultIntervalMins * time.Minute)
+
+		select {
+		case <-time.NewTimer(sleepTime).C:
+			// continue
+		case <-ctx.Done():
+			return
+		}
 	}
 }
