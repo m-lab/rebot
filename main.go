@@ -205,12 +205,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sleepTime := time.Duration(rand.ExpFloat64()*float64(defaultIntervalMins)) * time.Second
-
 	for {
+		sleepTime := time.Duration(rand.ExpFloat64()*float64(defaultIntervalMins)) * time.Second
 		checkAndReboot(candidateHistory)
 		if oneshot {
-			cancel()
+			break
 		}
 
 		log.Info("Done. Going to sleep for ", defaultIntervalMins, " minutes...")
