@@ -105,7 +105,7 @@ func Test_getOfflineNodes(t *testing.T) {
 			prom:    fakeProm,
 			minutes: testMins,
 			want: []node.Node{
-				node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+				node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
 			},
 		},
 		{
@@ -132,7 +132,7 @@ func Test_getOfflineNodes(t *testing.T) {
 func Test_filterOfflineSites(t *testing.T) {
 
 	candidates := []node.Node{
-		node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
 	}
 
 	tests := []struct {
@@ -156,7 +156,7 @@ func Test_filterOfflineSites(t *testing.T) {
 			},
 			candidates: candidates,
 			want: []node.Node{
-				node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
+				node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
 			},
 		},
 	}

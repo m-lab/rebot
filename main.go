@@ -146,7 +146,7 @@ func checkAndReboot(h map[string]node.History) {
 		metricRebooted.WithLabelValues(n.Name, n.Site).Set(1)
 	}
 
-	history.Upsert(toReboot, h)
+	history.Update(toReboot, h)
 	history.Write(defaultHistoryPath, h)
 
 }

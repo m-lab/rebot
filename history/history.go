@@ -43,10 +43,10 @@ func Write(path string, candidateHistory map[string]node.History) {
 	rtx.Must(err, "Cannot write the candidates history's JSON file!")
 }
 
-// Upsert updates the LastReboot field for all the candidates named in
+// Update updates the LastReboot field for all the candidates named in
 // the nodes slice. If a candidate did not previously exist, it creates a
 // new one.
-func Upsert(candidates []node.Node, history map[string]node.History) {
+func Update(candidates []node.Node, history map[string]node.History) {
 	if len(candidates) == 0 {
 		return
 	}

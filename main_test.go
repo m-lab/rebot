@@ -135,18 +135,18 @@ func Test_filterRecent(t *testing.T) {
 
 	// Nodes where no previous reboot was present
 	noHistory := []node.Node{
-		node.NewNode("mlab2.iad1t.measurement-lab.org", "iad1t"),
+		node.New("mlab2.iad1t.measurement-lab.org", "iad1t"),
 	}
 
 	// Nodes where LastReboot is before 24hrs ago.
 	rebootable := []node.Node{
-		node.NewNode("mlab2.iad0t.measurement-lab.org", "iad0t"),
+		node.New("mlab2.iad0t.measurement-lab.org", "iad0t"),
 	}
 
 	// Nodes where LastReboot is within the last 24hrs.
 	notRebootable := []node.Node{
-		node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
-		node.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
+		node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		node.New("mlab1.iad1t.measurement-lab.org", "iad1t"),
 	}
 	tests := []struct {
 		name             string

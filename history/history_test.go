@@ -121,14 +121,14 @@ func cloneHistory(h map[string]node.History) map[string]node.History {
 }
 func Test_updateHistory(t *testing.T) {
 	nodes := []node.Node{
-		node.NewNode("mlab1.iad0t.measurement-lab.org", "iad0t"),
-		node.NewNode("mlab1.iad1t.measurement-lab.org", "iad1t"),
+		node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		node.New("mlab1.iad1t.measurement-lab.org", "iad1t"),
 	}
 
 	testHistory := cloneHistory(fakeHist)
 
 	t.Run("success", func(t *testing.T) {
-		Upsert(nodes, testHistory)
+		Update(nodes, testHistory)
 
 		// Check that LastReboot is within the last minute for nodes
 		// in the nodes slice.
@@ -142,6 +142,35 @@ func Test_updateHistory(t *testing.T) {
 				t.Errorf("updateHistory() did not update LastReboot for node %v.", candidate.Name)
 			}
 
+		}
+	})
+
+	testHistory = cloneHistory(fakeHist)
+	t.Run("success-empty-nodes-slice", func(t *testing.T) {
+		Update([]node.Node{}, testHistory)
+
+		if !cmp.Equal(testHistory, fakeHist) {
+			t.Errorf("updateHistory() = %v, want %v", testHistory, fakeHist)
+		}
+
+	})
+
+	n := []node.Node{
+		node.New("mlab2.iad1t.measurement-lab.org", "iad1t"),
+	}
+
+	t.Run("success-new-candidate", func(t *testing.T) {
+		Update(n, testHistory)
+
+		// Check that the new candidate was added and time is within the last
+		// minute.
+		v, ok := testHistory["mlab2.iad1t.measurement-lab.org"]
+		if !ok {
+			t.Errorf("updateHistory() = %v, want %v", testHistory, fakeHist)
+		}
+
+		if !v.LastReboot.After(time.Now().Add(-1 * time.Minute)) {
+			t.Errorf("updateHistory() did not update LastReboot for node %v.", v.Name)
 		}
 	})
 }
