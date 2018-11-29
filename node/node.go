@@ -10,12 +10,13 @@ type Node struct {
 	Site string
 }
 
-// NodeHistory holds the last reboot of a Node.
+// History holds the last reboot of a Node.
 type History struct {
 	Node
 	LastReboot time.Time
 }
 
+// New returns a new Node
 func New(name string, site string) Node {
 	return Node{
 		Name: name,
@@ -23,7 +24,7 @@ func New(name string, site string) Node {
 	}
 }
 
-// NewNodeHistory returns a new NodeHistory.
+// NewHistory returns a new NodeHistory.
 func NewHistory(name string, site string, lastReboot time.Time) History {
 	return History{
 		New(name, site),
