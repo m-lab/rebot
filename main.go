@@ -194,7 +194,7 @@ func main() {
 	defer cancel()
 
 	for {
-		sleepTime := time.Duration(rand.ExpFloat64()*float64(defaultIntervalMins)) * time.Second
+		sleepTime := time.Duration(rand.ExpFloat64()*float64(defaultIntervalMins)) * time.Minute
 		checkAndReboot(candidateHistory)
 		if oneshot {
 			break
