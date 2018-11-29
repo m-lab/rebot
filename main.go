@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"flag"
+	"fmt"
 	"math/rand"
 	"net/http"
 	"os"
@@ -138,9 +139,19 @@ func checkAndReboot(h map[string]node.History) {
 }
 
 // promMetrics serves Prometheus metrics over HTTP.
-func promMetrics() {
-	http.Handle("/metrics", promhttp.Handler())
-	log.Fatal(http.ListenAndServe(listenAddr, nil))
+func promMetrics() *http.Server {
+	srv := &http.Server{Addr: listenAddr}
+	handler := http.NewServeMux()
+	handler.Handle("/metrics", promhttp.Handler())
+	srv.Handler = handler
+
+	go func() {
+		err := srv.ListenAndServe()
+		if err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+	return srv
 }
 
 // initPrometheusClient initializes a Prometheus client with HTTP basic
@@ -184,7 +195,8 @@ func main() {
 	flagx.ArgsFromEnv(flag.CommandLine)
 
 	initPrometheusClient()
-	go promMetrics()
+	srv := promMetrics()
+	defer srv.Shutdown(nil)
 
 	// First, check to see if there's an existing candidate history file.
 	candidateHistory := history.Read(historyPath)
@@ -204,6 +216,7 @@ func main() {
 		case <-time.NewTimer(sleepTime).C:
 			// continue
 		case <-ctx.Done():
+			fmt.Println("Returning")
 			return
 		}
 	}

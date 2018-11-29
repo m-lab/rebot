@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -182,10 +183,29 @@ func Test_filterRecent(t *testing.T) {
 	}
 }
 
-func Test_main(t *testing.T) {
+func Test_main_oneshot(t *testing.T) {
 	restore := osx.MustSetenv("ONESHOT", "1")
 	defer restore()
-	t.Run("success-oneshot", func(t *testing.T) {
-		main()
-	})
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+
+	main()
+
+}
+
+func Test_main_multi(t *testing.T) {
+	restore := osx.MustSetenv("ONESHOT", "0")
+	defer restore()
+
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		fmt.Println("cancel")
+		cancel()
+	}()
+
+	main()
 }
