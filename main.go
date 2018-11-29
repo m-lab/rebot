@@ -46,7 +46,6 @@ var (
 	credentialsPath string
 	rebootCmd       string
 
-	flags      *flag.FlagSet
 	dryRun     bool
 	oneshot    bool
 	listenAddr string
@@ -171,19 +170,18 @@ func init() {
 
 	log.SetLevel(log.DebugLevel)
 
-	flags = flag.NewFlagSet("", flag.ExitOnError)
-	flags.BoolVar(&dryRun, "dryrun", false,
+	flag.BoolVar(&dryRun, "dryrun", false,
 		"Do not reboot anything, just list.")
-	flags.BoolVar(&oneshot, "oneshot", false,
+	flag.BoolVar(&oneshot, "oneshot", false,
 		"Execute just once, do not loop.")
-	flags.StringVar(&listenAddr, "listenaddr", ":9999",
+	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
 	prometheus.MustRegister(metricRebooted)
 }
 
 func main() {
-	flags.Parse(os.Args[1:])
-	flagx.ArgsFromEnv(flags)
+	flag.Parse()
+	flagx.ArgsFromEnv(flag.CommandLine)
 
 	initPrometheusClient()
 	go promMetrics()
