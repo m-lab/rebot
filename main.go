@@ -15,6 +15,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/m-lab/go/flagx"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/rebot/healthcheck"
 	"github.com/m-lab/rebot/history"
@@ -45,6 +46,7 @@ var (
 	credentialsPath string
 	rebootCmd       string
 
+	flags      *flag.FlagSet
 	dryRun     bool
 	oneshot    bool
 	listenAddr string
@@ -109,21 +111,6 @@ func filterRecent(candidates []node.Node, candidateHistory map[string]node.Histo
 	return filtered
 }
 
-// parseFlags reads the runtime flags.
-func parseFlags() {
-	flag.Parse()
-
-	if dryRun {
-		log.Info("Dry run, no node will be rebooted and the history file will not be updated.")
-	}
-}
-
-func readEnv() {
-	if os.Getenv("REBOT_ONESHOT") == "1" {
-		oneshot = true
-	}
-}
-
 // checkAndReboot implements Rebot's reboot logic.
 func checkAndReboot(h map[string]node.History) {
 	offline, err := healthcheck.GetRebootable(prom, defaultMins)
@@ -184,25 +171,24 @@ func init() {
 
 	log.SetLevel(log.DebugLevel)
 
-	flag.BoolVar(&dryRun, "dryrun", false,
+	flags = flag.NewFlagSet("", flag.ExitOnError)
+	flags.BoolVar(&dryRun, "dryrun", false,
 		"Do not reboot anything, just list.")
-	flag.BoolVar(&oneshot, "oneshot", false,
+	flags.BoolVar(&oneshot, "oneshot", false,
 		"Execute just once, do not loop.")
-	flag.StringVar(&listenAddr, "listenaddr", ":9999",
+	flags.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
-
 	prometheus.MustRegister(metricRebooted)
 }
 
 func main() {
-	readEnv()
-	parseFlags()
+	flags.Parse(os.Args[1:])
+	flagx.ArgsFromEnv(flags)
 
 	initPrometheusClient()
 	go promMetrics()
 
-	// First, check to see if there's an existing candidate history file
-	// and make sure we always write it back on exit.
+	// First, check to see if there's an existing candidate history file.
 	candidateHistory := history.Read(historyPath)
 
 	defer cancel()
