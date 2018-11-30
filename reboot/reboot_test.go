@@ -74,4 +74,44 @@ func Test_rebootMany(t *testing.T) {
 		}
 	})
 
+	t.Run("success-empty-slice", func(t *testing.T) {
+		got := Many(testRebootCmd, []node.Node{})
+		if got == nil || len(got) != 0 {
+			t.Errorf("rebootMany() = %v, error map not empty.", got)
+		}
+	})
+
+	toReboot = []node.Node{
+		node.Node{
+			Name: "mlab1.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
+		node.Node{
+			Name: "mlab2.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
+		node.Node{
+			Name: "mlab3.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
+		node.Node{
+			Name: "mlab1.lga1t.measurement-lab.org",
+			Site: "lga1t",
+		},
+		node.Node{
+			Name: "mlab2.lga1t.measurement-lab.org",
+			Site: "lga1t",
+		},
+		node.Node{
+			Name: "mlab3.lga1t.measurement-lab.org",
+			Site: "lga1t",
+		},
+	}
+	t.Run("success-too-many-nodes", func(t *testing.T) {
+		got := Many(testRebootCmd, toReboot)
+		if got == nil || len(got) != 0 {
+			t.Errorf("rebootMany() = %v, error map not empty.", got)
+		}
+	})
+
 }
