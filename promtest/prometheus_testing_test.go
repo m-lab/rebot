@@ -9,10 +9,9 @@ import (
 	"github.com/prometheus/common/model"
 )
 
-func TestPrometheusMockClient_Query(t *testing.T) {
-
-	testQuery := "sum_over_time(probe_success{instance=~\"s1.*\", module=\"icmp\"}[15m]) == 0"
-	testResponse := model.Vector{
+var (
+	testQuery    = "sum_over_time(probe_success{instance=~\"s1.*\", module=\"icmp\"}[15m]) == 0"
+	testResponse = model.Vector{
 		CreateSample(map[string]string{
 			"instance": "s1.iad0t.measurement-lab.org",
 			"job":      "blackbox-targets",
@@ -20,6 +19,9 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 			"site":     "iad0t",
 		}, 0, model.Time(time.Now().Unix())),
 	}
+)
+
+func TestPrometheusMockClient_Query(t *testing.T) {
 	type fields struct {
 		responses map[string]response
 	}
@@ -66,6 +68,7 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 			p := PrometheusMockClient{
 				responses: tt.responses,
 			}
+
 			got, err := p.Query(tt.args.ctx, tt.args.q, tt.args.t)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("PrometheusMockClient.Query() error = %v, wantErr %v", err, tt.wantErr)
@@ -75,5 +78,47 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 				t.Errorf("PrometheusMockClient.Query() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPrometheusMockClient_Unregister(t *testing.T) {
+
+	responses := map[string]response{
+		testQuery: response{
+			value: testResponse,
+			err:   nil,
+		},
+	}
+
+	t.Run("success", func(t *testing.T) {
+		p := &PrometheusMockClient{
+			responses: responses,
+		}
+
+		got := p.Unregister(testQuery)
+
+		if _, ok := p.responses[testQuery]; ok {
+			t.Error("PrometheusMockClient.Unregister() did not unregister the query.")
+		}
+
+		gotErr := p.Unregister("invalid-query")
+		if gotErr == nil {
+			t.Error("PrometheusMockClient.Unregister() did not return a function.")
+		}
+
+		// Register the query again
+		got()
+
+		if _, ok := p.responses[testQuery]; !ok {
+			t.Error("PrometheusMockClient.Unregister() the function did not register the query again.")
+		}
+	})
+
+}
+
+func TestNewPrometheusMockClient(t *testing.T) {
+	p := NewPrometheusMockClient()
+	if p == nil || p.responses == nil {
+		t.Errorf("NewPrometheusMockClient() did not initialize PrometheusMockClient correctly.")
 	}
 }
