@@ -10,6 +10,11 @@ import (
 	"github.com/prometheus/common/model"
 )
 
+// PromClient is Prometheus HTTP client's interface
+type PromClient interface {
+	Query(context.Context, string, time.Time) (model.Value, error)
+}
+
 // PrometheusMockClient is a test client that returns fake values only for a
 // configurable set of queries. New queries/responses can be added by calling
 // Register(string, model.Value).
@@ -35,6 +40,19 @@ func (p *PrometheusMockClient) Register(q string, resp model.Value, err error) {
 		value: resp,
 		err:   err,
 	}
+}
+
+// Unregister removes a mapped query and returns a function to add it back.
+func (p *PrometheusMockClient) Unregister(q string) func() {
+	v, ok := p.responses[q]
+	if ok {
+		delete(p.responses, q)
+		return func() {
+			p.Register(q, v.value, v.err)
+		}
+	}
+
+	return func() {}
 }
 
 // CreateSample returns a reference to a new model.Sample having labels, value
