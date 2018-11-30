@@ -202,7 +202,7 @@ func Test_main_multi(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		time.Sleep(1 * time.Second)
+		time.Sleep(5 * time.Second)
 		fmt.Println("cancel")
 		cancel()
 	}()
