@@ -188,9 +188,11 @@ func Test_main_oneshot(t *testing.T) {
 	defer restore()
 
 	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
 
 	main()
+
+	cancel()
+	time.Sleep(2 * time.Second)
 
 }
 
@@ -199,11 +201,9 @@ func Test_main_multi(t *testing.T) {
 	defer restore()
 
 	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
 
 	go func() {
-		time.Sleep(5 * time.Second)
-		fmt.Println("cancel")
+		time.Sleep(1 * time.Second)
 		cancel()
 	}()
 
