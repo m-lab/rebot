@@ -3,15 +3,14 @@ package history
 import (
 	"encoding/json"
 	"io/ioutil"
-	"log"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/m-lab/rebot/node"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/m-lab/go/rtx"
+	"github.com/m-lab/rebot/node"
+	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -23,7 +22,7 @@ var (
 		"mlab1.iad0t.measurement-lab.org": node.NewHistory(
 			"mlab1.iad0t.measurement-lab.org", "iad0t", time.Now()),
 		"mlab2.iad0t.measurement-lab.org": node.NewHistory(
-			"mlab.iad0t.measurement-lab.org", "iad0t",
+			"mlab2.iad0t.measurement-lab.org", "iad0t",
 			time.Now().Add(-25*time.Hour)),
 		"mlab1.iad1t.measurement-lab.org": node.NewHistory(
 			"mlab1.iad1t.measurement-lab.org", "iad1t",
@@ -171,6 +170,52 @@ func Test_updateHistory(t *testing.T) {
 
 		if !v.LastReboot.After(time.Now().Add(-1 * time.Minute)) {
 			t.Errorf("updateHistory() did not update LastReboot for node %v.", v.Name)
+		}
+	})
+}
+
+func TestUpdateStatus(t *testing.T) {
+	nodes := []node.Node{
+		node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		node.New("mlab1.iad1t.measurement-lab.org", "iad1t"),
+	}
+
+	testHistory := cloneHistory(fakeHist)
+	t.Run("success-no-unchecked", func(t *testing.T) {
+		UpdateStatus(nodes, testHistory)
+
+		for _, v := range testHistory {
+			if v.Status == node.Unchecked {
+				t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
+			}
+		}
+	})
+
+	testHistory = cloneHistory(fakeHist)
+	t.Run("success-offline-nodes-failed", func(t *testing.T) {
+		UpdateStatus(nodes, testHistory)
+
+		for _, v := range nodes {
+			el, ok := testHistory[v.Name]
+			if !ok || el.Status != node.Failed {
+				t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
+			}
+		}
+	})
+
+	testHistory = cloneHistory(fakeHist)
+	t.Run("success-online-nodes-rebooted", func(t *testing.T) {
+
+		nodes := []node.Node{}
+
+		UpdateStatus(nodes, testHistory)
+
+		for _, v := range testHistory {
+
+			el, _ := testHistory[v.Name]
+			if el.Status != node.Rebooted {
+				t.Errorf("UpdateStatus() did not update Status for node %v (Status: %v).", el.Name, el.Status)
+			}
 		}
 	})
 }

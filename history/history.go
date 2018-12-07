@@ -43,9 +43,28 @@ func Write(path string, candidateHistory map[string]node.History) {
 	rtx.Must(err, "Cannot write the candidates history's JSON file!")
 }
 
+func UpdateStatus(candidates []node.Node, history map[string]node.History) {
+
+	for _, c := range candidates {
+		hist, ok := history[c.Name]
+		if ok && hist.Status == node.Unchecked {
+			hist.Status = node.Failed
+			history[c.Name] = hist
+		}
+	}
+
+	// If there is any other "Unchecked" at this point, it is online now.
+	for k, v := range history {
+		if v.Status == node.Unchecked {
+			v.Status = node.Rebooted
+			history[k] = v
+		}
+	}
+}
+
 // Update updates the LastReboot field for all the candidates named in
-// the nodes slice. If a candidate did not previously exist, it creates a
-// new one.
+// the nodes slice and sets the Status to unchecked.
+// If a candidate did not previously exist, it creates a new one.
 func Update(candidates []node.Node, history map[string]node.History) {
 	if len(candidates) == 0 {
 		return
@@ -56,6 +75,7 @@ func Update(candidates []node.Node, history map[string]node.History) {
 		el, ok := history[c.Name]
 		if ok {
 			el.LastReboot = time.Now()
+			el.Status = node.Unchecked
 			history[c.Name] = el
 		} else {
 			history[c.Name] = node.NewHistory(c.Name, c.Site, time.Now())

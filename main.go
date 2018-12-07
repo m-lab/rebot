@@ -115,6 +115,10 @@ func filterRecent(candidates []node.Node, candidateHistory map[string]node.Histo
 func checkAndReboot(h map[string]node.History) {
 	offline, err := healthcheck.GetRebootable(prom, defaultMins)
 
+	if !dryRun {
+		history.UpdateStatus(offline, h)
+	}
+
 	if err != nil {
 		log.Error("Unable to retrieve the list of rebootable nodes. " +
 			"Is Prometheus reachable?")
