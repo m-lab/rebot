@@ -51,7 +51,7 @@ var (
 	oneshot    bool
 	listenAddr string
 
-	// Prometheus metric for exposing number of rebooted machines on last run.
+	// Prometheus metric for exposing machines for which a reboot command was
 	metricRebooted = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "rebot_last_rebooted",

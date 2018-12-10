@@ -4,16 +4,18 @@ import (
 	"time"
 )
 
+type NodeStatus uint8
+
 const (
 	// Unchecked is the default status, used when a reboot command has just
 	// been issued.
-	Unchecked = 0
+	Unchecked = NodeStatus(0)
 
 	// Rebooted means the machine was successfully rebooted on the last run.
-	Rebooted = 1
+	Rebooted = NodeStatus(1)
 
 	// Failed means the machine is still offline after a reboot command.
-	Failed = 2
+	Failed = NodeStatus(2)
 )
 
 // Node represents a machine on M-Lab's infrastructure
@@ -29,7 +31,7 @@ type Node struct {
 type History struct {
 	Node
 	LastReboot time.Time
-	Status     uint8
+	Status     NodeStatus
 }
 
 // New returns a new Node

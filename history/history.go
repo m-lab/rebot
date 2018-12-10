@@ -43,11 +43,16 @@ func Write(path string, candidateHistory map[string]node.History) {
 	rtx.Must(err, "Cannot write the candidates history's JSON file!")
 }
 
+// UpdateStatus updates the history according to the list of nodes to be
+// rebooted on the current run. If a node was in Unchecked status, it will be
+// updated to either Failed, if it's still in the candidates slice, or Rebooted
+// if it's not.
 func UpdateStatus(candidates []node.Node, history map[string]node.History) {
 
 	for _, c := range candidates {
 		hist, ok := history[c.Name]
 		if ok && hist.Status == node.Unchecked {
+			log.WithField("node", hist.Name).Warn("Reboot failed during the last run.")
 			hist.Status = node.Failed
 			history[c.Name] = hist
 		}
@@ -56,6 +61,7 @@ func UpdateStatus(candidates []node.Node, history map[string]node.History) {
 	// If there is any other "Unchecked" at this point, it is online now.
 	for k, v := range history {
 		if v.Status == node.Unchecked {
+			log.WithField("node", v.Name).Warn("The node was rebooted successfully during the last run.")
 			v.Status = node.Rebooted
 			history[k] = v
 		}
