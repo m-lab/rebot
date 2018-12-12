@@ -51,15 +51,46 @@ var (
 	oneshot    bool
 	listenAddr string
 
-	// Prometheus metric for exposing machines for which a reboot command was
-	metricRebooted = prometheus.NewGaugeVec(
+	// Prometheus metric for last time a machine was rebooted.
+	metricLastRebootTs = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Name: "rebot_last_rebooted",
-			Help: "Whether a machine was rebooted during the last run.",
+			Name: "rebot_last_reboot_timestamp",
+			Help: "Timestamp of the last reboot for a machine.",
 		},
 		[]string{
 			"machine",
 			"site",
+		},
+	)
+
+	// Prometheus metric for total number of reboots.
+	metricTotalReboots = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "rebot_reboot_total",
+			Help: "Total number of reboots since startup.",
+		},
+	)
+
+	// Prometheus metric for number of DRAC operations executed.
+	metricDRACOps = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "rebot_drac_operations_total",
+			Help: "Total number of DRAC operations run.",
+		},
+		[]string{
+			"machine",
+			"site",
+			"type",
+			"status",
+		},
+	)
+
+	metricOffline = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "rebot_machines_offline",
+			Help: "Number of machines currently offline. It excludes " +
+				"machines that Rebot is ignoring because the switch at the " +
+				"site is down.",
 		},
 	)
 
@@ -115,6 +146,8 @@ func filterRecent(candidates []node.Node, candidateHistory map[string]node.Histo
 func checkAndReboot(h map[string]node.History) {
 	offline, err := healthcheck.GetRebootable(prom, defaultMins)
 
+	metricOffline.Set(float64(len(offline)))
+
 	if !dryRun {
 		history.UpdateStatus(offline, h)
 	}
@@ -127,15 +160,15 @@ func checkAndReboot(h map[string]node.History) {
 
 	toReboot := filterRecent(offline, h)
 
-	metricRebooted.Reset()
-
 	if !dryRun {
-		reboot.Many(rebootCmd, toReboot)
+		reboot.Many(rebootCmd, toReboot, metricDRACOps)
 	}
 
 	for _, n := range toReboot {
-		metricRebooted.WithLabelValues(n.Name, n.Site).Set(1)
+		metricLastRebootTs.WithLabelValues(n.Name, n.Site).Set(float64(time.Now().Unix()))
 	}
+
+	metricTotalReboots.Add(float64(len(toReboot)))
 
 	history.Update(toReboot, h)
 	history.Write(defaultHistoryPath, h)
@@ -191,7 +224,10 @@ func init() {
 		"Execute just once, do not loop.")
 	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
-	prometheus.MustRegister(metricRebooted)
+	prometheus.MustRegister(metricLastRebootTs)
+	prometheus.MustRegister(metricTotalReboots)
+	prometheus.MustRegister(metricDRACOps)
+	prometheus.MustRegister(metricOffline)
 }
 
 func main() {
@@ -207,6 +243,8 @@ func main() {
 
 	defer cancel()
 
+	rand.Seed(time.Now().UTC().UnixNano())
+
 	for {
 		sleepTime := time.Duration(rand.ExpFloat64()*float64(defaultIntervalMins)) * time.Minute
 		checkAndReboot(candidateHistory)
@@ -214,7 +252,7 @@ func main() {
 			break
 		}
 
-		log.Info("Done. Going to sleep for ", defaultIntervalMins, " minutes...")
+		log.Info("Done. Going to sleep for ", sleepTime)
 
 		select {
 		case <-time.NewTimer(sleepTime).C:

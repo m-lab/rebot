@@ -4,6 +4,7 @@ import (
 	"os/exec"
 
 	"github.com/m-lab/rebot/node"
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -11,14 +12,17 @@ const rebootCmd = "drac.py"
 
 // one reboots a single machine by calling the reboot command
 // and returns an error if the exit status is not zero.
-func one(rebootCmd string, toReboot node.Node) error {
+func one(rebootCmd string, toReboot node.Node, metricDRACOps *prometheus.CounterVec) error {
 	cmd := exec.Command(rebootCmd, "reboot", toReboot.Name)
 	output, err := cmd.Output()
 
 	if err != nil {
 		log.Error(err)
+		metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
 		return err
 	}
+
+	metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
 
 	log.Debug(string(output))
 	log.WithFields(log.Fields{"node": toReboot}).Info("Reboot command successfully sent.")
@@ -27,7 +31,7 @@ func one(rebootCmd string, toReboot node.Node) error {
 
 // Many reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
-func Many(rebootCmd string, toReboot []node.Node) map[string]error {
+func Many(rebootCmd string, toReboot []node.Node, metricDRACOps *prometheus.CounterVec) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {
@@ -46,7 +50,7 @@ func Many(rebootCmd string, toReboot []node.Node) map[string]error {
 
 	for _, c := range toReboot {
 		log.WithFields(log.Fields{"node": c}).Info("Rebooting node...")
-		err := one(rebootCmd, c)
+		err := one(rebootCmd, c, metricDRACOps)
 		if err != nil {
 			errors[c.Name] = err
 		}
