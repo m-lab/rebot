@@ -61,7 +61,7 @@ func UpdateStatus(candidates []node.Node, history map[string]node.History) {
 	// If there is any other "Unchecked" at this point, it is online now.
 	for k, v := range history {
 		if v.Status == node.Unchecked {
-			log.WithField("node", v.Name).Warn("The node was rebooted successfully during the last run.")
+			log.WithField("node", v.Name).Info("The node was rebooted successfully during the last run.")
 			v.Status = node.Rebooted
 			history[k] = v
 		}
