@@ -165,7 +165,7 @@ func checkAndReboot(h map[string]node.History) {
 	}
 
 	for _, n := range toReboot {
-		metricLastRebootTs.WithLabelValues(n.Name, n.Site).Set(float64(time.Now().Unix()))
+		metricLastRebootTs.WithLabelValues(n.Name, n.Site).SetToCurrentTime()
 	}
 
 	metricTotalReboots.Add(float64(len(toReboot)))

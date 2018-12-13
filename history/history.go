@@ -78,14 +78,7 @@ func Update(candidates []node.Node, history map[string]node.History) {
 
 	log.WithFields(log.Fields{"nodes": candidates}).Info("Updating history...")
 	for _, c := range candidates {
-		el, ok := history[c.Name]
-		if ok {
-			el.LastReboot = time.Now()
-			el.Status = node.Unchecked
-			history[c.Name] = el
-		} else {
-			history[c.Name] = node.NewHistory(c.Name, c.Site, time.Now())
-		}
+		history[c.Name] = node.NewHistory(c.Name, c.Site, time.Now())
 	}
 
 }
