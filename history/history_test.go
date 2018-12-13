@@ -197,7 +197,7 @@ func TestUpdateStatus(t *testing.T) {
 
 		for _, v := range nodes {
 			el, ok := testHistory[v.Name]
-			if !ok || el.Status != node.Failed {
+			if !ok || el.Status != node.ObservedOffline {
 				t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
 			}
 		}
