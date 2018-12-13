@@ -185,7 +185,7 @@ func TestUpdateStatus(t *testing.T) {
 		UpdateStatus(nodes, testHistory)
 
 		for _, v := range testHistory {
-			if v.Status == node.Unchecked {
+			if v.Status == node.NotObserved {
 				t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
 			}
 		}
@@ -213,7 +213,7 @@ func TestUpdateStatus(t *testing.T) {
 		for _, v := range testHistory {
 
 			el, _ := testHistory[v.Name]
-			if el.Status != node.Rebooted {
+			if el.Status != node.ObservedOnline {
 				t.Errorf("UpdateStatus() did not update Status for node %v (Status: %v).", el.Name, el.Status)
 			}
 		}

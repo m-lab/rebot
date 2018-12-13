@@ -4,18 +4,20 @@ import (
 	"time"
 )
 
+// NodeStatus is an alias for uint8, used for readability.
 type NodeStatus uint8
 
 const (
-	// Unchecked is the default status, used when a reboot command has just
+	// NotObserved is the default status, used when a reboot command has just
 	// been issued.
-	Unchecked = NodeStatus(0)
+	NotObserved = NodeStatus(0)
 
-	// Rebooted means the machine was successfully rebooted on the last run.
-	Rebooted = NodeStatus(1)
+	// ObservedOnline means the machine was seen online during the last run.
+	ObservedOnline = NodeStatus(1)
 
-	// Failed means the machine is still offline after a reboot command.
-	Failed = NodeStatus(2)
+	// ObservedOffline means the machine is still seen as offline after a
+	// reboot command.
+	ObservedOffline = NodeStatus(2)
 )
 
 // Node represents a machine on M-Lab's infrastructure
@@ -26,8 +28,8 @@ type Node struct {
 
 // History holds the last reboot of a Node and the status.
 //
-// Status is always unchecked initially, and should be updated to rebooted
-// or failed as soon as the information is available.
+// Status is always NotObserved initially, and should be updated to
+// ObservedOnline or ObservedOffline as soon as the information is available.
 type History struct {
 	Node
 	LastReboot time.Time
@@ -42,11 +44,11 @@ func New(name string, site string) Node {
 	}
 }
 
-// NewHistory returns a new NodeHistory, defaulting Status to "unchecked".
+// NewHistory returns a new NodeHistory, defaulting Status to "NotObserved".
 func NewHistory(name string, site string, lastReboot time.Time) History {
 	return History{
 		New(name, site),
 		lastReboot,
-		Unchecked,
+		NotObserved,
 	}
 }

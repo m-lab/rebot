@@ -44,32 +44,32 @@ func Write(path string, candidateHistory map[string]node.History) {
 }
 
 // UpdateStatus updates the history according to the list of nodes to be
-// rebooted on the current run. If a node was in Unchecked status, it will be
-// updated to either Failed, if it's still in the candidates slice, or Rebooted
-// if it's not.
+// rebooted on the current run. If a node was in NotObserved status, it will be
+// updated to either ObservedOffline, if it's still in the candidates slice, or
+// ObservedOnline if it's not.
 func UpdateStatus(candidates []node.Node, history map[string]node.History) {
 
 	for _, c := range candidates {
 		hist, ok := history[c.Name]
-		if ok && hist.Status == node.Unchecked {
+		if ok && hist.Status == node.NotObserved {
 			log.WithField("node", hist.Name).Warn("Reboot failed during the last run.")
-			hist.Status = node.Failed
+			hist.Status = node.ObservedOffline
 			history[c.Name] = hist
 		}
 	}
 
-	// If there is any other "Unchecked" at this point, it is online now.
+	// If there is any other "NotObserved" at this point, it is online now.
 	for k, v := range history {
-		if v.Status == node.Unchecked {
+		if v.Status == node.NotObserved {
 			log.WithField("node", v.Name).Info("The node was rebooted successfully during the last run.")
-			v.Status = node.Rebooted
+			v.Status = node.ObservedOnline
 			history[k] = v
 		}
 	}
 }
 
 // Update updates the LastReboot field for all the candidates named in
-// the nodes slice and sets the Status to unchecked.
+// the nodes slice and sets the Status to NotObserved.
 // If a candidate did not previously exist, it creates a new one.
 func Update(candidates []node.Node, history map[string]node.History) {
 	if len(candidates) == 0 {
