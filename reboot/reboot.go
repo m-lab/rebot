@@ -10,19 +10,36 @@ import (
 
 const rebootCmd = "drac.py"
 
+var (
+	// MetricDRACOps is the Prometheus metric to keep track of the number of
+	// DRAC operations executed.
+	MetricDRACOps = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "rebot_drac_operations_total",
+			Help: "Total number of DRAC operations run.",
+		},
+		[]string{
+			"machine",
+			"site",
+			"type",
+			"status",
+		},
+	)
+)
+
 // one reboots a single machine by calling the reboot command
 // and returns an error if the exit status is not zero.
-func one(rebootCmd string, toReboot node.Node, metricDRACOps *prometheus.CounterVec) error {
+func one(rebootCmd string, toReboot node.Node) error {
 	cmd := exec.Command(rebootCmd, "reboot", toReboot.Name)
 	output, err := cmd.Output()
 
 	if err != nil {
 		log.Error(err)
-		metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		MetricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
 		return err
 	}
 
-	metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
+	MetricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
 
 	log.Debug(string(output))
 	log.WithFields(log.Fields{"node": toReboot}).Info("Reboot command successfully sent.")
@@ -31,7 +48,7 @@ func one(rebootCmd string, toReboot node.Node, metricDRACOps *prometheus.Counter
 
 // Many reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
-func Many(rebootCmd string, toReboot []node.Node, metricDRACOps *prometheus.CounterVec) map[string]error {
+func Many(rebootCmd string, toReboot []node.Node) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {
@@ -50,7 +67,7 @@ func Many(rebootCmd string, toReboot []node.Node, metricDRACOps *prometheus.Coun
 
 	for _, c := range toReboot {
 		log.WithFields(log.Fields{"node": c}).Info("Rebooting node...")
-		err := one(rebootCmd, c, metricDRACOps)
+		err := one(rebootCmd, c)
 		if err != nil {
 			errors[c.Name] = err
 		}

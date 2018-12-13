@@ -71,20 +71,6 @@ var (
 		},
 	)
 
-	// Prometheus metric for number of DRAC operations executed.
-	metricDRACOps = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "rebot_drac_operations_total",
-			Help: "Total number of DRAC operations run.",
-		},
-		[]string{
-			"machine",
-			"site",
-			"type",
-			"status",
-		},
-	)
-
 	metricOffline = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "rebot_machines_offline",
@@ -161,7 +147,7 @@ func checkAndReboot(h map[string]node.History) {
 	toReboot := filterRecent(offline, h)
 
 	if !dryRun {
-		reboot.Many(rebootCmd, toReboot, metricDRACOps)
+		reboot.Many(rebootCmd, toReboot)
 	}
 
 	for _, n := range toReboot {
@@ -224,10 +210,13 @@ func init() {
 		"Execute just once, do not loop.")
 	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
+
 	prometheus.MustRegister(metricLastRebootTs)
 	prometheus.MustRegister(metricTotalReboots)
-	prometheus.MustRegister(metricDRACOps)
 	prometheus.MustRegister(metricOffline)
+
+	prometheus.MustRegister(reboot.MetricDRACOps)
+
 }
 
 func main() {

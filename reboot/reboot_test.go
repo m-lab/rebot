@@ -5,24 +5,11 @@ import (
 	"testing"
 
 	"github.com/m-lab/rebot/node"
-	"github.com/prometheus/client_golang/prometheus"
 )
 
 const testRebootCmd = "./drac_test.sh"
 
 func Test_rebootOne(t *testing.T) {
-	metricDRACOps := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "rebot_drac_operations_total",
-			Help: "Total number of DRAC operations run.",
-		},
-		[]string{
-			"machine",
-			"site",
-			"type",
-			"status",
-		},
-	)
 
 	tests := []struct {
 		name     string
@@ -47,7 +34,7 @@ func Test_rebootOne(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := one(testRebootCmd, tt.toReboot, metricDRACOps); (err != nil) != tt.wantErr {
+			if err := one(testRebootCmd, tt.toReboot); (err != nil) != tt.wantErr {
 				t.Errorf("rebootOne() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
@@ -55,18 +42,6 @@ func Test_rebootOne(t *testing.T) {
 }
 
 func Test_rebootMany(t *testing.T) {
-	metricDRACOps := prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Name: "rebot_drac_operations_total",
-			Help: "Total number of DRAC operations run.",
-		},
-		[]string{
-			"machine",
-			"site",
-			"type",
-			"status",
-		},
-	)
 
 	toReboot := []node.Node{
 		node.Node{
@@ -81,7 +56,7 @@ func Test_rebootMany(t *testing.T) {
 	want := map[string]error{}
 
 	t.Run("success-all-machines-rebooted", func(t *testing.T) {
-		if got := Many(testRebootCmd, toReboot, metricDRACOps); !reflect.DeepEqual(got, want) {
+		if got := Many(testRebootCmd, toReboot); !reflect.DeepEqual(got, want) {
 			t.Errorf("rebootMany() = %v, want %v", got, want)
 		}
 	})
@@ -95,14 +70,14 @@ func Test_rebootMany(t *testing.T) {
 	}
 
 	t.Run("failure-exit-code-non-zero", func(t *testing.T) {
-		got := Many(testRebootCmd, toReboot, metricDRACOps)
+		got := Many(testRebootCmd, toReboot)
 		if err, ok := got["mlab4.lga0t.measurement-lab.org"]; !ok || err == nil {
 			t.Errorf("rebootMany() = %v, key not in map or err == nil", got)
 		}
 	})
 
 	t.Run("success-empty-slice", func(t *testing.T) {
-		got := Many(testRebootCmd, []node.Node{}, metricDRACOps)
+		got := Many(testRebootCmd, []node.Node{})
 		if got == nil || len(got) != 0 {
 			t.Errorf("rebootMany() = %v, error map not empty.", got)
 		}
@@ -135,7 +110,7 @@ func Test_rebootMany(t *testing.T) {
 		},
 	}
 	t.Run("success-too-many-nodes", func(t *testing.T) {
-		got := Many(testRebootCmd, toReboot, metricDRACOps)
+		got := Many(testRebootCmd, toReboot)
 		if got == nil || len(got) != 0 {
 			t.Errorf("rebootMany() = %v, error map not empty.", got)
 		}
