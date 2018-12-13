@@ -206,9 +206,9 @@ func TestUpdateStatus(t *testing.T) {
 	testHistory = cloneHistory(fakeHist)
 	t.Run("success-online-nodes-rebooted", func(t *testing.T) {
 
-		nodes := []node.Node{}
+		empty := []node.Node{}
 
-		UpdateStatus(nodes, testHistory)
+		UpdateStatus(empty, testHistory)
 
 		for _, v := range testHistory {
 
