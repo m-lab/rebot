@@ -10,6 +10,7 @@ import (
 const testRebootCmd = "./drac_test.sh"
 
 func Test_rebootOne(t *testing.T) {
+
 	tests := []struct {
 		name     string
 		toReboot node.Node
@@ -41,6 +42,7 @@ func Test_rebootOne(t *testing.T) {
 }
 
 func Test_rebootMany(t *testing.T) {
+
 	toReboot := []node.Node{
 		node.Node{
 			Name: "mlab1.lga0t.measurement-lab.org",

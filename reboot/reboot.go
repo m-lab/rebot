@@ -4,10 +4,32 @@ import (
 	"os/exec"
 
 	"github.com/m-lab/rebot/node"
+	"github.com/prometheus/client_golang/prometheus"
 	log "github.com/sirupsen/logrus"
 )
 
 const rebootCmd = "drac.py"
+
+var (
+	// metricDRACOps is the Prometheus metric to keep track of the number of
+	// DRAC operations executed.
+	metricDRACOps = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "rebot_drac_operations_total",
+			Help: "Total number of DRAC operations run.",
+		},
+		[]string{
+			"machine",
+			"site",
+			"type",
+			"status",
+		},
+	)
+)
+
+func init() {
+	prometheus.MustRegister(metricDRACOps)
+}
 
 // one reboots a single machine by calling the reboot command
 // and returns an error if the exit status is not zero.
@@ -17,8 +39,11 @@ func one(rebootCmd string, toReboot node.Node) error {
 
 	if err != nil {
 		log.Error(err)
+		metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
 		return err
 	}
+
+	metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
 
 	log.Debug(string(output))
 	log.WithFields(log.Fields{"node": toReboot}).Info("Reboot command successfully sent.")
