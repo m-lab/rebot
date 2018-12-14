@@ -181,41 +181,48 @@ func TestUpdateStatus(t *testing.T) {
 	}
 
 	testHistory := cloneHistory(fakeHist)
-	t.Run("success-no-unchecked", func(t *testing.T) {
-		UpdateStatus(nodes, testHistory)
 
-		for _, v := range testHistory {
-			if v.Status == node.NotObserved {
-				t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
-			}
+	UpdateStatus(nodes, testHistory)
+
+	for _, v := range testHistory {
+		if v.Status == node.NotObserved {
+			t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
 		}
-	})
+	}
 
-	testHistory = cloneHistory(fakeHist)
-	t.Run("success-offline-nodes-failed", func(t *testing.T) {
-		UpdateStatus(nodes, testHistory)
+}
 
-		for _, v := range nodes {
-			el, ok := testHistory[v.Name]
-			if !ok || el.Status != node.ObservedOffline {
-				t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
-			}
+func TestUpdateStatusObservedOffline(t *testing.T) {
+	nodes := []node.Node{
+		node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
+		node.New("mlab1.iad1t.measurement-lab.org", "iad1t"),
+	}
+
+	testHistory := cloneHistory(fakeHist)
+
+	UpdateStatus(nodes, testHistory)
+
+	for _, v := range nodes {
+		el, ok := testHistory[v.Name]
+		if !ok || el.Status != node.ObservedOffline {
+			t.Errorf("UpdateStatus() did not update Status for node %v.", v.Name)
 		}
-	})
+	}
+}
 
-	testHistory = cloneHistory(fakeHist)
-	t.Run("success-online-nodes-rebooted", func(t *testing.T) {
+func TestUpdateStatusObservedOnline(t *testing.T) {
+	testHistory := cloneHistory(fakeHist)
 
-		empty := []node.Node{}
+	empty := []node.Node{}
 
-		UpdateStatus(empty, testHistory)
+	UpdateStatus(empty, testHistory)
 
-		for _, v := range testHistory {
+	for _, v := range testHistory {
 
-			el, _ := testHistory[v.Name]
-			if el.Status != node.ObservedOnline {
-				t.Errorf("UpdateStatus() did not update Status for node %v (Status: %v).", el.Name, el.Status)
-			}
+		el, _ := testHistory[v.Name]
+		if el.Status != node.ObservedOnline {
+			t.Errorf("UpdateStatus() did not update Status for node %v (Status: %v).", el.Name, el.Status)
 		}
-	})
+	}
+
 }
