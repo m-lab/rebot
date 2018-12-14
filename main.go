@@ -214,9 +214,6 @@ func init() {
 	prometheus.MustRegister(metricLastRebootTs)
 	prometheus.MustRegister(metricTotalReboots)
 	prometheus.MustRegister(metricOffline)
-
-	prometheus.MustRegister(reboot.MetricDRACOps)
-
 }
 
 func main() {
