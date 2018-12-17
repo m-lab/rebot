@@ -11,6 +11,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -36,6 +37,9 @@ const (
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
 	defaultRebootCmd       = "drac.py"
+
+	minSleepTime = 15
+	maxSleepTime = 45
 )
 
 var (
@@ -232,7 +236,9 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	for {
-		sleepTime := time.Duration(rand.ExpFloat64()*float64(defaultIntervalMins)) * time.Minute
+		sleepTime := time.Duration(math.Min(maxSleepTime, math.Max(minSleepTime,
+			rand.ExpFloat64()*float64(defaultIntervalMins))) *
+			float64(time.Minute))
 		checkAndReboot(candidateHistory)
 		if oneshot {
 			break
