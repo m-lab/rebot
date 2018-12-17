@@ -236,9 +236,9 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	for {
-		sleepTime := time.Duration(
-			math.Min(maxSleepTime, math.Max(minSleepTime,
-				rand.ExpFloat64()*float64(defaultIntervalMins)))) * time.Minute
+		sleepTime := time.Duration(math.Min(maxSleepTime, math.Max(minSleepTime,
+			rand.ExpFloat64()*float64(defaultIntervalMins))) *
+			float64(time.Minute))
 		checkAndReboot(candidateHistory)
 		if oneshot {
 			break
