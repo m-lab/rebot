@@ -10,14 +10,13 @@ import (
 	"bytes"
 	"context"
 	"flag"
-	"fmt"
-	"math"
 	"math/rand"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/m-lab/go/flagx"
+	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/rebot/healthcheck"
 	"github.com/m-lab/rebot/history"
@@ -32,14 +31,10 @@ import (
 )
 
 const (
-	defaultIntervalMins    = 30
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
 	defaultRebootCmd       = "drac.py"
-
-	minSleepTime = 15
-	maxSleepTime = 45
 )
 
 var (
@@ -54,6 +49,10 @@ var (
 	dryRun     bool
 	oneshot    bool
 	listenAddr string
+
+	minSleepTime time.Duration
+	maxSleepTime time.Duration
+	sleepTime    time.Duration
 
 	// Prometheus metric for last time a machine was rebooted.
 	metricLastRebootTs = prometheus.NewGaugeVec(
@@ -214,7 +213,15 @@ func init() {
 		"Execute just once, do not loop.")
 	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
-
+	flag.DurationVar(&sleepTime, "sleeptime", 30*time.Minute,
+		"How long to sleep between reboot attempts on average")
+	// TODO: decide if min and max really need to be so close to avg. Rule of thumb
+	// in the memoryless docs suggests that 3 Minutes and 75 minutes might be
+	// better choices.
+	flag.DurationVar(&minSleepTime, "minsleeptime", 15*time.Minute,
+		"Minimum time to sleep between reboot attempts")
+	flag.DurationVar(&maxSleepTime, "maxsleeptime", 45*time.Minute,
+		"Maximum time to sleep between reboot attempts")
 	prometheus.MustRegister(metricLastRebootTs)
 	prometheus.MustRegister(metricTotalReboots)
 	prometheus.MustRegister(metricOffline)
@@ -235,23 +242,8 @@ func main() {
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
-	for {
-		sleepTime := time.Duration(math.Min(maxSleepTime, math.Max(minSleepTime,
-			rand.ExpFloat64()*float64(defaultIntervalMins))) *
-			float64(time.Minute))
-		checkAndReboot(candidateHistory)
-		if oneshot {
-			break
-		}
-
-		log.Info("Done. Going to sleep for ", sleepTime)
-
-		select {
-		case <-time.NewTimer(sleepTime).C:
-			// continue
-		case <-ctx.Done():
-			fmt.Println("Returning")
-			return
-		}
-	}
+	memoryless.Run(
+		ctx,
+		func() { checkAndReboot(candidateHistory) },
+		memoryless.Config{Min: minSleepTime, Expected: sleepTime, Max: maxSleepTime, Once: oneshot})
 }
