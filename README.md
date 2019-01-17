@@ -1,3 +1,5 @@
+[![GoDoc](https://godoc.org/github.com/m-lab/rebot?status.svg)](https://godoc.org/github.com/m-lab/rebot) [![Build Status](https://travis-ci.org/m-lab/rebot.svg?branch=master)](https://travis-ci.org/m-lab/rebot) [![Coverage Status](https://coveralls.io/repos/github/m-lab/rebot/badge.svg?branch=master)](https://coveralls.io/github/m-lab/rebot?branch=master) [![Go Report Card](https://goreportcard.com/badge/github.com/m-lab/rebot)](https://goreportcard.com/report/github.com/m-lab/rebot)
+
 ReBot
 ======
 The rebot tool identifies machines on the M-Lab infrastructure that are not
