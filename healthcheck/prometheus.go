@@ -23,8 +23,9 @@ var (
 			unless on (machine) count_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) < 14
 			unless on (machine) rate(inotify_extension_create_total{ext=".s2c_snaplog"}[%[1]dm]) > 0`
 
-	// To determine if a switch is offline, pings are generally more reliable
-	// than SNMP scraping.
+	// SwitchQuery is a prometheus query to determine what switches are
+	// offline.  To determine if a switch is offline, pings are generally
+	// more reliable than SNMP scraping.
 	SwitchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
 )
 

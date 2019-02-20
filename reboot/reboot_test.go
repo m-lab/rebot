@@ -44,11 +44,11 @@ func Test_rebootOne(t *testing.T) {
 func Test_rebootMany(t *testing.T) {
 
 	toReboot := []node.Node{
-		node.Node{
+		{
 			Name: "mlab1.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
-		node.Node{
+		{
 			Name: "mlab2.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
@@ -63,7 +63,7 @@ func Test_rebootMany(t *testing.T) {
 
 	// mlab4.* machines always returns a non-zero exit code in drac_test.sh.
 	toReboot = []node.Node{
-		node.Node{
+		{
 			Name: "mlab4.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
@@ -84,27 +84,27 @@ func Test_rebootMany(t *testing.T) {
 	})
 
 	toReboot = []node.Node{
-		node.Node{
+		{
 			Name: "mlab1.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
-		node.Node{
+		{
 			Name: "mlab2.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
-		node.Node{
+		{
 			Name: "mlab3.lga0t.measurement-lab.org",
 			Site: "lga0t",
 		},
-		node.Node{
+		{
 			Name: "mlab1.lga1t.measurement-lab.org",
 			Site: "lga1t",
 		},
-		node.Node{
+		{
 			Name: "mlab2.lga1t.measurement-lab.org",
 			Site: "lga1t",
 		},
-		node.Node{
+		{
 			Name: "mlab3.lga1t.measurement-lab.org",
 			Site: "lga1t",
 		},

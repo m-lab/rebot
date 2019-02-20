@@ -233,7 +233,7 @@ func main() {
 
 	initPrometheusClient()
 	srv := promMetrics()
-	defer srv.Shutdown(nil)
+	defer srv.Shutdown(ctx)
 
 	// First, check to see if there's an existing candidate history file.
 	candidateHistory := history.Read(historyPath)
