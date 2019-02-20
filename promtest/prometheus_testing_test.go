@@ -40,7 +40,7 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 		{
 			name: "success",
 			responses: map[string]response{
-				testQuery: response{
+				testQuery: {
 					value: testResponse,
 					err:   nil,
 				},
@@ -84,7 +84,7 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 func TestPrometheusMockClient_Unregister(t *testing.T) {
 
 	responses := map[string]response{
-		testQuery: response{
+		testQuery: {
 			value: testResponse,
 			err:   nil,
 		},
