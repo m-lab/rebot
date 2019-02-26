@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/m-lab/go/flagx"
+	"github.com/m-lab/go/httpx"
 	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/rebot/healthcheck"
@@ -166,17 +167,13 @@ func checkAndReboot(h map[string]node.History) {
 
 // promMetrics serves Prometheus metrics over HTTP.
 func promMetrics() *http.Server {
-	srv := &http.Server{Addr: listenAddr}
 	handler := http.NewServeMux()
 	handler.Handle("/metrics", promhttp.Handler())
-	srv.Handler = handler
-
-	go func() {
-		err := srv.ListenAndServe()
-		if err != http.ErrServerClosed {
-			log.Fatal(err)
-		}
-	}()
+	srv := &http.Server{
+		Addr:    listenAddr,
+		Handler: handler,
+	}
+	rtx.Must(httpx.ListenAndServeAsync(srv), "Could not start metrics server")
 	return srv
 }
 
