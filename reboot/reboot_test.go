@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/m-lab/go/prometheusx"
 	"github.com/m-lab/rebot/node"
 )
 
@@ -116,4 +117,9 @@ func Test_rebootMany(t *testing.T) {
 		}
 	})
 
+}
+
+func TestMetrics(t *testing.T) {
+	metricDRACOps.WithLabelValues("x", "x", "x", "x")
+	prometheusx.LintMetrics(t)
 }

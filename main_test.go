@@ -215,5 +215,6 @@ func Test_main_multi(t *testing.T) {
 }
 
 func TestMetrics(t *testing.T) {
+	metricLastRebootTs.WithLabelValues("x", "x")
 	prometheusx.LintMetrics(t)
 }
