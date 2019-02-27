@@ -5,6 +5,7 @@ import (
 
 	"github.com/m-lab/rebot/node"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -13,7 +14,7 @@ const rebootCmd = "drac.py"
 var (
 	// metricDRACOps is the Prometheus metric to keep track of the number of
 	// DRAC operations executed.
-	metricDRACOps = prometheus.NewCounterVec(
+	metricDRACOps = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "rebot_drac_operations_total",
 			Help: "Total number of DRAC operations run.",
@@ -26,10 +27,6 @@ var (
 		},
 	)
 )
-
-func init() {
-	prometheus.MustRegister(metricDRACOps)
-}
 
 // one reboots a single machine by calling the reboot command
 // and returns an error if the exit status is not zero.

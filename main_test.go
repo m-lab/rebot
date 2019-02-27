@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/m-lab/go/prometheusx"
+
 	"github.com/m-lab/go/osx"
 	"github.com/m-lab/rebot/healthcheck"
 	"github.com/m-lab/rebot/node"
@@ -210,4 +212,8 @@ func Test_main_multi(t *testing.T) {
 	}()
 
 	main()
+}
+
+func TestMetrics(t *testing.T) {
+	prometheusx.LintMetrics(t)
 }
