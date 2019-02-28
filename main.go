@@ -11,12 +11,12 @@ import (
 	"context"
 	"flag"
 	"math/rand"
-	"net/http"
 	"os"
 	"time"
 
+	"github.com/m-lab/go/prometheusx"
+
 	"github.com/m-lab/go/flagx"
-	"github.com/m-lab/go/httpx"
 	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/rebot/healthcheck"
@@ -27,7 +27,7 @@ import (
 	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -56,7 +56,7 @@ var (
 	sleepTime    time.Duration
 
 	// Prometheus metric for last time a machine was rebooted.
-	metricLastRebootTs = prometheus.NewGaugeVec(
+	metricLastRebootTs = promauto.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "rebot_last_reboot_timestamp",
 			Help: "Timestamp of the last reboot for a machine.",
@@ -68,14 +68,14 @@ var (
 	)
 
 	// Prometheus metric for total number of reboots.
-	metricTotalReboots = prometheus.NewCounter(
+	metricTotalReboots = promauto.NewCounter(
 		prometheus.CounterOpts{
 			Name: "rebot_reboot_total",
 			Help: "Total number of reboots since startup.",
 		},
 	)
 
-	metricOffline = prometheus.NewGauge(
+	metricOffline = promauto.NewGauge(
 		prometheus.GaugeOpts{
 			Name: "rebot_machines_offline",
 			Help: "Number of machines currently offline. It excludes " +
@@ -165,18 +165,6 @@ func checkAndReboot(h map[string]node.History) {
 
 }
 
-// promMetrics serves Prometheus metrics over HTTP.
-func promMetrics() *http.Server {
-	handler := http.NewServeMux()
-	handler.Handle("/metrics", promhttp.Handler())
-	srv := &http.Server{
-		Addr:    listenAddr,
-		Handler: handler,
-	}
-	rtx.Must(httpx.ListenAndServeAsync(srv), "Could not start metrics server")
-	return srv
-}
-
 // initPrometheusClient initializes a Prometheus client with HTTP basic
 // authentication. If we are running main() in a test, prom will be set
 // already, thus we won't replace it.
@@ -219,17 +207,14 @@ func init() {
 		"Minimum time to sleep between reboot attempts")
 	flag.DurationVar(&maxSleepTime, "maxsleeptime", 45*time.Minute,
 		"Maximum time to sleep between reboot attempts")
-	prometheus.MustRegister(metricLastRebootTs)
-	prometheus.MustRegister(metricTotalReboots)
-	prometheus.MustRegister(metricOffline)
 }
 
 func main() {
 	flag.Parse()
-	flagx.ArgsFromEnv(flag.CommandLine)
+	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not parse env vars")
 
 	initPrometheusClient()
-	srv := promMetrics()
+	srv := prometheusx.MustStartPrometheus(listenAddr)
 	defer srv.Shutdown(ctx)
 
 	// First, check to see if there's an existing candidate history file.
