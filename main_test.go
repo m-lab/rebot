@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/m-lab/go/prometheusx"
+	promlint "github.com/m-lab/go/prometheusx/promtest"
 
 	"github.com/m-lab/go/osx"
 	"github.com/m-lab/rebot/healthcheck"
@@ -216,5 +216,5 @@ func Test_main_multi(t *testing.T) {
 
 func TestMetrics(t *testing.T) {
 	metricLastRebootTs.WithLabelValues("x", "x")
-	prometheusx.LintMetrics(t)
+	promlint.LintMetrics(t)
 }
