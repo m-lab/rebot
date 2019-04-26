@@ -18,7 +18,7 @@ var (
 			unless on(site) gmx_site_maintenance == 1
 			unless on (machine) lame_duck_node == 1
 			unless on (machine) count_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) < 14
-			unless on (machine) rate(ndt_test_total[%[1]dm]) > 0`
+			unless on (machine) increase(ndt_test_total[%[1]dm]) > 0`
 
 	// SwitchQuery is a prometheus query to determine what switches are
 	// offline.  To determine if a switch is offline, pings are generally
