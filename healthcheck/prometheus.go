@@ -14,6 +14,9 @@ import (
 var (
 	NodeQuery = `label_replace(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) == 0,
 	"site", "$1", "machine", ".+?\\.(.+?)\\..+")
+			unless on (machine)
+				label_replace(sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) > 0,
+        			"site", "$1", "machine", ".+?\\.(.+?)\\..+")
 			unless on(machine) gmx_machine_maintenance == 1
 			unless on(site) gmx_site_maintenance == 1
 			unless on (machine) lame_duck_node == 1
