@@ -25,7 +25,7 @@ import (
 	"github.com/m-lab/rebot/promtest"
 	"github.com/m-lab/rebot/reboot"
 	"github.com/prometheus/client_golang/api"
-	"github.com/prometheus/client_golang/api/prometheus/v1"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
@@ -35,7 +35,6 @@ const (
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
-	defaultRebootCmd       = "drac.py"
 )
 
 var (
@@ -45,7 +44,9 @@ var (
 
 	historyPath     string
 	credentialsPath string
-	rebootCmd       string
+	rebootAddr      string
+	rebootUsername  string
+	rebootPassword  string
 
 	dryRun     bool
 	oneshot    bool
@@ -151,7 +152,13 @@ func checkAndReboot(h map[string]node.History) {
 	toReboot := filterRecent(offline, h)
 
 	if !dryRun {
-		reboot.Many(rebootCmd, toReboot)
+		// Configure the HTTP client and send reboot commands.
+		config := &reboot.ClientConfig{
+			Addr:     rebootAddr,
+			Username: rebootUsername,
+			Password: rebootPassword,
+		}
+		reboot.Many(config, toReboot)
 	}
 
 	for _, n := range toReboot {
@@ -188,7 +195,6 @@ func initPrometheusClient() {
 func init() {
 	historyPath = defaultHistoryPath
 	credentialsPath = defaultCredentialsPath
-	rebootCmd = defaultRebootCmd
 
 	log.SetLevel(log.DebugLevel)
 
@@ -198,6 +204,8 @@ func init() {
 		"Execute just once, do not loop.")
 	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
+	flag.StringVar(&rebootAddr, "reboot.addr", "",
+		"Reboot API instance to send reboot request to.")
 	flag.DurationVar(&sleepTime, "sleeptime", 30*time.Minute,
 		"How long to sleep between reboot attempts on average")
 	// TODO: decide if min and max really need to be so close to avg. Rule of thumb

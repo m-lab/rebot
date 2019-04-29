@@ -1,7 +1,8 @@
 package reboot
 
 import (
-	"os/exec"
+	"net/http"
+	"time"
 
 	"github.com/m-lab/rebot/node"
 	"github.com/prometheus/client_golang/prometheus"
@@ -9,15 +10,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const rebootCmd = "drac.py"
+const (
+	// Default timeout for reboot requests. This is intentionally quite long to
+	// accommodate for nodes that are slow to respond.
+	clientTimeout = 2 * time.Minute
+	rebootURL     = "/v1/reboot"
+)
 
 var (
-	// metricDRACOps is the Prometheus metric to keep track of the number of
-	// DRAC operations executed.
-	metricDRACOps = promauto.NewCounterVec(
+	metricRebootRequests = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "rebot_drac_operations_total",
-			Help: "Total number of DRAC operations run.",
+			Name: "rebot_reboot_requests_total",
+			Help: "Total number of reboot requests performed.",
 		},
 		[]string{
 			"machine",
@@ -28,33 +32,50 @@ var (
 	)
 )
 
-// one reboots a single machine by calling the reboot command
-// and returns an error if the exit status is not zero.
-func one(rebootCmd string, toReboot node.Node) error {
-	cmd := exec.Command(rebootCmd, "reboot", toReboot.Name)
-	output, err := cmd.Output()
+// ClientConfig holds the configuration for the Reboot API client.
+type ClientConfig struct {
+	Addr     string
+	Username string
+	Password string
+}
 
+// one reboots a single machine by send an HTTP request to the Reboot API
+// and returns an error if the response code is not 200 or there is a timeout.
+func one(client *http.Client, config *ClientConfig, toReboot node.Node) error {
+	rebootURL := config.Addr + rebootURL + "?host" + toReboot.Name
+
+	// Create the HTTP request
+	request, err := http.NewRequest(http.MethodPost, rebootURL, nil)
 	if err != nil {
-		log.Error(err)
-		metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		log.WithError(err).Error("Cannot create HTTP request.")
 		return err
 	}
 
-	metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
+	response, err := client.Do(request)
+	if err != nil {
+		log.Error(err)
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		return err
+	}
 
-	log.Debug(string(output))
-	log.WithFields(log.Fields{"node": toReboot}).Info("Reboot command successfully sent.")
+	metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
+	log.WithFields(log.Fields{"node": toReboot}).Info(response.Body)
 	return nil
 }
 
 // Many reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
-func Many(rebootCmd string, toReboot []node.Node) map[string]error {
+func Many(config *ClientConfig, toReboot []node.Node) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {
 		log.Info("There are no nodes to reboot.")
 		return errors
+	}
+
+	// Create the Reboot API client
+	rebootClient := &http.Client{
+		Timeout: clientTimeout,
 	}
 
 	// If there are more than 5 nodes to be rebooted, do nothing.
@@ -68,7 +89,7 @@ func Many(rebootCmd string, toReboot []node.Node) map[string]error {
 
 	for _, c := range toReboot {
 		log.WithFields(log.Fields{"node": c}).Info("Rebooting node...")
-		err := one(rebootCmd, c)
+		err := one(rebootClient, config, c)
 		if err != nil {
 			errors[c.Name] = err
 		}
