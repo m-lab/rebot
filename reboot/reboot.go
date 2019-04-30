@@ -23,7 +23,8 @@ var (
 	metricRebootRequests = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "rebot_reboot_requests_total",
-			Help: "Total number of reboot requests performed.",
+			Help: "Total number of reboot requests sent and " +
+				"corresponding status.",
 		},
 		[]string{
 			"machine",
