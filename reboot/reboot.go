@@ -16,7 +16,9 @@ const (
 	// accommodate for nodes that are slow to respond and should be higher
 	// than the Reboot API's BMC connection timeout.
 	clientTimeout = 90 * time.Second
-	rebootURL     = "/v1/reboot"
+
+	// Path for reboot requests, relative to the Reboot API's root.
+	rebootURL = "/v1/reboot"
 )
 
 var (
@@ -104,7 +106,7 @@ func Many(config *ClientConfig, toReboot []node.Node) map[string]error {
 
 	// If there are more than 5 nodes to be rebooted, do nothing.
 	// TODO(roberto) find a better way to report this case to the caller.
-	if len(toReboot) > 30 {
+	if len(toReboot) > 5 {
 		log.WithFields(log.Fields{"nodes": toReboot}).Error("There are more than 5 nodes offline, skipping.")
 		return errors
 	}
