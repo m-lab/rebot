@@ -14,10 +14,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/prometheusx"
 
 	"github.com/m-lab/go/flagx"
-	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/rebot/healthcheck"
 	"github.com/m-lab/rebot/history"
@@ -180,7 +180,7 @@ func initPrometheusClient() {
 		user, pass := getCredentials(credentialsPath)
 
 		config = api.Config{
-			Address: "https://" + user + ":" + pass + "@prometheus.mlab-oti.measurementlab.net",
+			Address: "https://" + user + ":" + pass + "@prometheus.mlab-sandbox.measurementlab.net",
 		}
 
 		client, err := api.NewClient(config)
@@ -222,7 +222,7 @@ func main() {
 	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not parse env vars")
 
 	initPrometheusClient()
-	srv := prometheusx.MustStartPrometheus(listenAddr)
+	srv := prometheusx.MustServeMetrics()
 	defer srv.Shutdown(ctx)
 
 	// First, check to see if there's an existing candidate history file.
@@ -236,4 +236,5 @@ func main() {
 		ctx,
 		func() { checkAndReboot(candidateHistory) },
 		memoryless.Config{Min: minSleepTime, Expected: sleepTime, Max: maxSleepTime, Once: oneshot})
+
 }

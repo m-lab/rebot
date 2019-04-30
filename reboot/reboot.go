@@ -1,6 +1,7 @@
 package reboot
 
 import (
+	"io/ioutil"
 	"net/http"
 	"time"
 
@@ -11,9 +12,10 @@ import (
 )
 
 const (
-	// Default timeout for reboot requests. This is intentionally quite long to
-	// accommodate for nodes that are slow to respond.
-	clientTimeout = 2 * time.Minute
+	// Default timeout for reboot requests. This is intentionally long to
+	// accommodate for nodes that are slow to respond and should be higher
+	// than the Reboot API's BMC connection timeout.
+	clientTimeout = 90 * time.Second
 	rebootURL     = "/v1/reboot"
 )
 
@@ -42,7 +44,7 @@ type ClientConfig struct {
 // one reboots a single machine by send an HTTP request to the Reboot API
 // and returns an error if the response code is not 200 or there is a timeout.
 func one(client *http.Client, config *ClientConfig, toReboot node.Node) error {
-	rebootURL := config.Addr + rebootURL + "?host" + toReboot.Name
+	rebootURL := config.Addr + rebootURL + "?host=" + toReboot.Name
 
 	// Create the HTTP request
 	request, err := http.NewRequest(http.MethodPost, rebootURL, nil)
@@ -51,15 +53,36 @@ func one(client *http.Client, config *ClientConfig, toReboot node.Node) error {
 		return err
 	}
 
+	// Add HTTP authentication if needed.
+	if config.Username != "" && config.Password != "" {
+		request.SetBasicAuth(config.Username, config.Password)
+	}
+
+	// Send the reboot request and check for errors.
 	response, err := client.Do(request)
 	if err != nil {
-		log.Error(err)
+		log.WithError(err).Error(err)
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		return err
+	}
+	defer response.Body.Close()
+
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.WithError(err).Error(err)
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		return err
+	}
+
+	if response.StatusCode != http.StatusOK {
+		log.Error(string(body))
 		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
 		return err
 	}
 
 	metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
-	log.WithFields(log.Fields{"node": toReboot}).Info(response.Body)
+
+	log.WithFields(log.Fields{"node": toReboot.Name}).Debug(string(body))
 	return nil
 }
 
@@ -80,7 +103,7 @@ func Many(config *ClientConfig, toReboot []node.Node) map[string]error {
 
 	// If there are more than 5 nodes to be rebooted, do nothing.
 	// TODO(roberto) find a better way to report this case to the caller.
-	if len(toReboot) > 5 {
+	if len(toReboot) > 30 {
 		log.WithFields(log.Fields{"nodes": toReboot}).Error("There are more than 5 nodes offline, skipping.")
 		return errors
 	}
