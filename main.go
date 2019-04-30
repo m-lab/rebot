@@ -241,5 +241,4 @@ func main() {
 		ctx,
 		func() { checkAndReboot(candidateHistory) },
 		memoryless.Config{Min: minSleepTime, Expected: sleepTime, Max: maxSleepTime, Once: oneshot})
-
 }
