@@ -64,7 +64,7 @@ func one(client *http.Client, config *ClientConfig, toReboot node.Node) error {
 	// Send the reboot request and check for errors.
 	response, err := client.Do(request)
 	if err != nil {
-		log.WithError(err).Error(err)
+		log.WithError(err).Error("Cannot send reboot request.")
 		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
 		return err
 	}

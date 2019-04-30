@@ -209,6 +209,10 @@ func init() {
 		"Address to listen on for telemetry.")
 	flag.StringVar(&rebootAddr, "reboot.addr", "",
 		"Reboot API instance to send reboot request to.")
+	flag.StringVar(&rebootUsername, "reboot.username", "",
+		"Username for the Reboot API.")
+	flag.StringVar(&rebootPassword, "reboot.password", "",
+		"Password for the Reboot API.")
 	flag.StringVar(&prometheusAddr, "prometheus.addr", defaultPrometheusAddr,
 		"Prometheus server to use.")
 	flag.DurationVar(&sleepTime, "sleeptime", 30*time.Minute,
