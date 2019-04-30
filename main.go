@@ -35,6 +35,7 @@ const (
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
+	defaultPrometheusAddr  = "prometheus.mlab-sandbox.measurementlab.net"
 )
 
 var (
@@ -48,9 +49,11 @@ var (
 	rebootUsername  string
 	rebootPassword  string
 
-	dryRun     bool
-	oneshot    bool
-	listenAddr string
+	dryRun  bool
+	oneshot bool
+
+	listenAddr     string
+	prometheusAddr string
 
 	minSleepTime time.Duration
 	maxSleepTime time.Duration
@@ -180,7 +183,7 @@ func initPrometheusClient() {
 		user, pass := getCredentials(credentialsPath)
 
 		config = api.Config{
-			Address: "https://" + user + ":" + pass + "@prometheus.mlab-sandbox.measurementlab.net",
+			Address: "https://" + user + ":" + pass + "@" + prometheusAddr,
 		}
 
 		client, err := api.NewClient(config)
@@ -206,6 +209,8 @@ func init() {
 		"Address to listen on for telemetry.")
 	flag.StringVar(&rebootAddr, "reboot.addr", "",
 		"Reboot API instance to send reboot request to.")
+	flag.StringVar(&prometheusAddr, "prometheus.addr", defaultPrometheusAddr,
+		"Prometheus server to use.")
 	flag.DurationVar(&sleepTime, "sleeptime", 30*time.Minute,
 		"How long to sleep between reboot attempts on average")
 	// TODO: decide if min and max really need to be so close to avg. Rule of thumb
