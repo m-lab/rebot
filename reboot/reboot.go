@@ -12,8 +12,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const ()
-
 var (
 	metricRebootRequests = promauto.NewCounterVec(
 		prometheus.CounterOpts{
