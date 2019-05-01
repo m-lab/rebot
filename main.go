@@ -48,9 +48,7 @@ const (
 )
 
 var (
-	config api.Config
-	client api.Client
-	prom   promtest.PromClient
+	prom promtest.PromClient
 
 	historyPath     string
 	credentialsPath string
@@ -98,7 +96,17 @@ var (
 	)
 
 	ctx, cancel = context.WithCancel(context.Background())
+
+	newRebooter = func(client *http.Client, baseURL, username,
+		password string) Rebooter {
+		return reboot.NewHTTPRebooter(client, baseURL, username, password)
+	}
 )
+
+// Rebooter is an interface that allows to test reboot.HTTPRebooter.
+type Rebooter interface {
+	Many([]node.Node) map[string]error
+}
 
 // getCredentials reads the Prometheus API credentials from the
 // provided path.
@@ -185,7 +193,7 @@ func initPrometheusClient() {
 	if prom == nil {
 		user, pass := getCredentials(credentialsPath)
 
-		config = api.Config{
+		config := api.Config{
 			Address: "https://" + user + ":" + pass + "@" + prometheusAddr,
 		}
 
