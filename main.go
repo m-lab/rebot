@@ -36,7 +36,7 @@ const (
 	defaultMins            = 15
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
-	defaultPrometheusAddr  = "prometheus.mlab-sandbox.measurementlab.net"
+	defaultProject         = "mlab-sandbox"
 
 	// Default timeout for reboot requests. This is intentionally long to
 	// accommodate for nodes that are slow to respond and should be higher
@@ -59,8 +59,8 @@ var (
 	dryRun  bool
 	oneshot bool
 
-	listenAddr     string
-	prometheusAddr string
+	listenAddr string
+	project    string
 
 	minSleepTime time.Duration
 	maxSleepTime time.Duration
@@ -194,7 +194,8 @@ func initPrometheusClient() {
 		user, pass := getCredentials(credentialsPath)
 
 		config := api.Config{
-			Address: "https://" + user + ":" + pass + "@" + prometheusAddr,
+			Address: "https://" + user + ":" + pass + "@prometheus." +
+				project + ".measurementlab.net",
 		}
 
 		client, err := api.NewClient(config)
@@ -224,8 +225,8 @@ func init() {
 		"Username for the Reboot API.")
 	flag.StringVar(&rebootPassword, "reboot.password", "",
 		"Password for the Reboot API.")
-	flag.StringVar(&prometheusAddr, "prometheus.addr", defaultPrometheusAddr,
-		"Prometheus server to use.")
+	flag.StringVar(&project, "project", defaultProject,
+		"Project to use for Prometheus.")
 	flag.DurationVar(&sleepTime, "sleeptime", 30*time.Minute,
 		"How long to sleep between reboot attempts on average")
 	// TODO: decide if min and max really need to be so close to avg. Rule of thumb
