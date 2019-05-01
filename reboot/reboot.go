@@ -3,7 +3,6 @@ package reboot
 import (
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"github.com/m-lab/rebot/node"
 	"github.com/prometheus/client_golang/prometheus"
@@ -11,15 +10,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const (
-	// Default timeout for reboot requests. This is intentionally long to
-	// accommodate for nodes that are slow to respond and should be higher
-	// than the Reboot API's BMC connection timeout.
-	clientTimeout = 90 * time.Second
-
-	// Path for reboot requests, relative to the Reboot API's root.
-	rebootURL = "/v1/reboot"
-)
+const ()
 
 var (
 	metricRebootRequests = promauto.NewCounterVec(
@@ -37,17 +28,29 @@ var (
 	)
 )
 
-// ClientConfig holds the configuration for the Reboot API client.
-type ClientConfig struct {
-	Addr     string
-	Username string
-	Password string
+// HTTPRebooter reboots one of more nodes calling the Reboot API via the
+// provided http.Client.
+type HTTPRebooter struct {
+	client   *http.Client
+	baseURL  string
+	username string
+	password string
+}
+
+// NewHTTPRebooter returns a HTTPRebooter with the provided fields.
+func NewHTTPRebooter(c *http.Client, baseURL, username, password string) *HTTPRebooter {
+	return &HTTPRebooter{
+		client:   c,
+		baseURL:  baseURL,
+		username: username,
+		password: password,
+	}
 }
 
 // one reboots a single machine by send an HTTP request to the Reboot API
 // and returns an error if the response code is not 200 or there is a timeout.
-func one(client *http.Client, config *ClientConfig, toReboot node.Node) error {
-	rebootURL := config.Addr + rebootURL + "?host=" + toReboot.Name
+func (r *HTTPRebooter) one(toReboot node.Node) error {
+	rebootURL := r.baseURL + "?host=" + toReboot.Name
 
 	// Create the HTTP request
 	request, err := http.NewRequest(http.MethodPost, rebootURL, nil)
@@ -57,12 +60,12 @@ func one(client *http.Client, config *ClientConfig, toReboot node.Node) error {
 	}
 
 	// Add HTTP authentication if needed.
-	if config.Username != "" && config.Password != "" {
-		request.SetBasicAuth(config.Username, config.Password)
+	if r.username != "" && r.password != "" {
+		request.SetBasicAuth(r.username, r.password)
 	}
 
 	// Send the reboot request and check for errors.
-	response, err := client.Do(request)
+	response, err := r.client.Do(request)
 	if err != nil {
 		log.WithError(err).Error("Cannot send reboot request.")
 		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
@@ -91,7 +94,7 @@ func one(client *http.Client, config *ClientConfig, toReboot node.Node) error {
 
 // Many reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
-func Many(config *ClientConfig, toReboot []node.Node) map[string]error {
+func (r *HTTPRebooter) Many(toReboot []node.Node) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {
@@ -99,14 +102,9 @@ func Many(config *ClientConfig, toReboot []node.Node) map[string]error {
 		return errors
 	}
 
-	// Create the Reboot API client
-	rebootClient := &http.Client{
-		Timeout: clientTimeout,
-	}
-
 	// If there are more than 5 nodes to be rebooted, do nothing.
 	// TODO(roberto) find a better way to report this case to the caller.
-	if len(toReboot) > 5 {
+	if len(toReboot) > 30 {
 		log.WithFields(log.Fields{"nodes": toReboot}).Error("There are more than 5 nodes offline, skipping.")
 		return errors
 	}
@@ -115,7 +113,7 @@ func Many(config *ClientConfig, toReboot []node.Node) map[string]error {
 
 	for _, c := range toReboot {
 		log.WithFields(log.Fields{"node": c}).Info("Rebooting node...")
-		err := one(rebootClient, config, c)
+		err := r.one(c)
 		if err != nil {
 			errors[c.Name] = err
 		}

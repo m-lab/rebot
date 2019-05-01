@@ -11,6 +11,7 @@ import (
 	"context"
 	"flag"
 	"math/rand"
+	"net/http"
 	"os"
 	"time"
 
@@ -36,6 +37,14 @@ const (
 	defaultCredentialsPath = "/tmp/credentials"
 	defaultHistoryPath     = "/tmp/candidateHistory.json"
 	defaultPrometheusAddr  = "prometheus.mlab-sandbox.measurementlab.net"
+
+	// Default timeout for reboot requests. This is intentionally long to
+	// accommodate for nodes that are slow to respond and should be higher
+	// than the Reboot API's BMC connection timeout.
+	clientTimeout = 90 * time.Second
+
+	// Endpoint for reboot requests, relative to the Reboot API's root.
+	rebootEndpoint = "/v1/reboot"
 )
 
 var (
@@ -137,7 +146,7 @@ func filterRecent(candidates []node.Node, candidateHistory map[string]node.Histo
 }
 
 // checkAndReboot implements Rebot's reboot logic.
-func checkAndReboot(h map[string]node.History) {
+func checkAndReboot(h map[string]node.History, rebooter *reboot.HTTPRebooter) {
 	offline, err := healthcheck.GetRebootable(prom, defaultMins)
 
 	metricOffline.Set(float64(len(offline)))
@@ -155,13 +164,7 @@ func checkAndReboot(h map[string]node.History) {
 	toReboot := filterRecent(offline, h)
 
 	if !dryRun {
-		// Configure the HTTP client and send reboot commands.
-		config := &reboot.ClientConfig{
-			Addr:     rebootAddr,
-			Username: rebootUsername,
-			Password: rebootPassword,
-		}
-		reboot.Many(config, toReboot)
+		rebooter.Many(toReboot)
 	}
 
 	for _, n := range toReboot {
@@ -237,12 +240,21 @@ func main() {
 	// First, check to see if there's an existing candidate history file.
 	candidateHistory := history.Read(historyPath)
 
+	// Create the HTTP client to send requests to the API.
+	client := &http.Client{
+		Timeout: clientTimeout,
+	}
+
+	// Create the HTTPRebooter.
+	baseURL := rebootAddr + rebootEndpoint
+	rebooter := reboot.NewHTTPRebooter(client, baseURL, rebootUsername, rebootPassword)
+
 	defer cancel()
 
 	rand.Seed(time.Now().UTC().UnixNano())
 
 	memoryless.Run(
 		ctx,
-		func() { checkAndReboot(candidateHistory) },
+		func() { checkAndReboot(candidateHistory, rebooter) },
 		memoryless.Config{Min: minSleepTime, Expected: sleepTime, Max: maxSleepTime, Once: oneshot})
 }
