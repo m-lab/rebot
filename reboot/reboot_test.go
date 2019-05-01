@@ -33,6 +33,9 @@ func Test_rebootMany(t *testing.T) {
 	// Set up the RoundTripFunc to return values useful for testing.
 	client := NewTestClient(func(req *http.Request) *http.Response {
 		fmt.Println(req.Header.Get("Authorization"))
+		// Check that the Authorization header contains the base64-encoded
+		// credentials "user:pass".
+		// $ echo -n user:pass | base64
 		if req.Header.Get("Authorization") != "Basic dXNlcjpwYXNz" {
 			return &http.Response{
 				StatusCode: http.StatusUnauthorized,
