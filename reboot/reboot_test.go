@@ -2,7 +2,9 @@ package reboot
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"reflect"
@@ -48,7 +50,7 @@ func Test_rebootMany(t *testing.T) {
 			}
 		}
 
-		// The "host" parameter must not be empty.
+		// "host" parameter must not be empty.
 		host := req.URL.Query().Get("host")
 		if host == "" {
 			return &http.Response{
@@ -149,6 +151,42 @@ func Test_rebootMany(t *testing.T) {
 		if got == nil || len(got) != 0 {
 			t.Errorf("rebootMany() = %v, error map not empty.", got)
 		}
+	})
+
+	toReboot = []node.Node{
+		{
+			Name: "mlab1.lga0t.measurement-lab.org",
+			Site: "lga0t",
+		},
+	}
+
+	t.Run("failure-cannot-create-request", func(t *testing.T) {
+		oldHTTPRequestFunc := newHTTPRequest
+		newHTTPRequest = func(method, url string, body io.Reader) (*http.Request, error) {
+			return nil, errors.New("Error while creating HTTP request")
+		}
+
+		got := rebooter.Many(toReboot)
+		newHTTPRequest = oldHTTPRequestFunc
+
+		if _, ok := got["mlab1.lga0t.measurement-lab.org"]; !ok {
+			t.Errorf("rebootMany() = %v, key not in map", got)
+		}
+	})
+
+	t.Run("failure-cannot-read-body", func(t *testing.T) {
+		oldReadAllFunc := readAll
+		readAll = func(reader io.Reader) ([]byte, error) {
+			return nil, errors.New("Cannot read")
+		}
+
+		got := rebooter.Many(toReboot)
+		readAll = oldReadAllFunc
+
+		if _, ok := got["mlab1.lga0t.measurement-lab.org"]; !ok {
+			t.Errorf("rebootMany() = %v, key not in map", got)
+		}
+
 	})
 
 }

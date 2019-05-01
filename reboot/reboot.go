@@ -2,6 +2,7 @@ package reboot
 
 import (
 	"errors"
+	"io"
 	"io/ioutil"
 	"net/http"
 
@@ -27,6 +28,14 @@ var (
 			"status",
 		},
 	)
+
+	// These can be swapped to simplify unit testing.
+	newHTTPRequest = func(method, url string, body io.Reader) (*http.Request, error) {
+		return http.NewRequest(method, url, body)
+	}
+	readAll = func(reader io.Reader) ([]byte, error) {
+		return ioutil.ReadAll(reader)
+	}
 )
 
 // HTTPRebooter reboots one of more nodes calling the Reboot API via the
@@ -54,7 +63,7 @@ func (r *HTTPRebooter) one(toReboot node.Node) error {
 	rebootURL := r.baseURL + "?host=" + toReboot.Name
 
 	// Create the HTTP request
-	request, err := http.NewRequest(http.MethodPost, rebootURL, nil)
+	request, err := newHTTPRequest(http.MethodPost, rebootURL, nil)
 	if err != nil {
 		log.WithError(err).Error("Cannot create HTTP request.")
 		return err
@@ -74,7 +83,7 @@ func (r *HTTPRebooter) one(toReboot node.Node) error {
 	}
 	defer response.Body.Close()
 
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := readAll(response.Body)
 	if err != nil {
 		log.WithError(err).Error(err)
 		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
