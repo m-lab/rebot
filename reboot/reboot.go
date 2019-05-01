@@ -36,6 +36,9 @@ var (
 	readAll = func(reader io.Reader) ([]byte, error) {
 		return ioutil.ReadAll(reader)
 	}
+	clientDo = func(r *HTTPRebooter, req *http.Request) (*http.Response, error) {
+		return r.client.Do(req)
+	}
 )
 
 // HTTPRebooter reboots one of more nodes calling the Reboot API via the
@@ -75,7 +78,7 @@ func (r *HTTPRebooter) one(toReboot node.Node) error {
 	}
 
 	// Send the reboot request and check for errors.
-	response, err := r.client.Do(request)
+	response, err := clientDo(r, request)
 	if err != nil {
 		log.WithError(err).Error("Cannot send reboot request.")
 		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)

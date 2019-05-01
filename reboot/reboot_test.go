@@ -161,6 +161,7 @@ func Test_rebootMany(t *testing.T) {
 	}
 
 	t.Run("failure-cannot-create-request", func(t *testing.T) {
+		// Swap newHTTPRequest to simulate failure during request creation.
 		oldHTTPRequestFunc := newHTTPRequest
 		newHTTPRequest = func(method, url string, body io.Reader) (*http.Request, error) {
 			return nil, errors.New("Error while creating HTTP request")
@@ -175,6 +176,8 @@ func Test_rebootMany(t *testing.T) {
 	})
 
 	t.Run("failure-cannot-read-body", func(t *testing.T) {
+		// Swap readAll function to simulate failure while reading the
+		// response body.
 		oldReadAllFunc := readAll
 		readAll = func(reader io.Reader) ([]byte, error) {
 			return nil, errors.New("Cannot read")
@@ -182,6 +185,23 @@ func Test_rebootMany(t *testing.T) {
 
 		got := rebooter.Many(toReboot)
 		readAll = oldReadAllFunc
+
+		if _, ok := got["mlab1.lga0t.measurement-lab.org"]; !ok {
+			t.Errorf("rebootMany() = %v, key not in map", got)
+		}
+
+	})
+
+	t.Run("failure-cannot-send-request", func(t *testing.T) {
+		// Swap clientDo function to simulate failure while sending
+		// the request.
+		oldClientDo := clientDo
+		clientDo = func(r *HTTPRebooter, req *http.Request) (*http.Response, error) {
+			return nil, errors.New("Cannot send request")
+		}
+
+		got := rebooter.Many(toReboot)
+		clientDo = oldClientDo
 
 		if _, ok := got["mlab1.lga0t.measurement-lab.org"]; !ok {
 			t.Errorf("rebootMany() = %v, key not in map", got)
