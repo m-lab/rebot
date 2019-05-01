@@ -12,6 +12,9 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Endpoint for reboot requests, relative to the Reboot API's root.
+const rebootEndpoint = "/v1/reboot"
+
 var (
 	metricRebootRequests = promauto.NewCounterVec(
 		prometheus.CounterOpts{
@@ -52,7 +55,7 @@ type HTTPRebooter struct {
 func NewHTTPRebooter(c *http.Client, baseURL, username, password string) *HTTPRebooter {
 	return &HTTPRebooter{
 		client:   c,
-		baseURL:  baseURL,
+		baseURL:  baseURL + rebootEndpoint,
 		username: username,
 		password: password,
 	}

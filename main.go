@@ -38,9 +38,6 @@ const (
 	// accommodate for nodes that are slow to respond and should be higher
 	// than the Reboot API's BMC connection timeout.
 	clientTimeout = 90 * time.Second
-
-	// Endpoint for reboot requests, relative to the Reboot API's root.
-	rebootEndpoint = "/v1/reboot"
 )
 
 var (
@@ -231,8 +228,7 @@ func main() {
 	}
 
 	// Create the HTTPRebooter.
-	baseURL := rebootAddr + rebootEndpoint
-	rebooter := reboot.NewHTTPRebooter(client, baseURL, rebootUsername, rebootPassword)
+	rebooter := reboot.NewHTTPRebooter(client, rebootAddr, rebootUsername, rebootPassword)
 
 	defer cancel()
 
