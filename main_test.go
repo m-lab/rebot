@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
@@ -68,18 +67,9 @@ func init() {
 }
 
 const (
-	testCredentialsPath = "credentials"
-	testHistoryPath     = "history"
-	testRebootCmd       = "./drac_test.sh"
+	testHistoryPath = "history"
+	testRebootCmd   = "./drac_test.sh"
 )
-
-func setupCredentials() {
-	cred := []byte("testuser\ntestpass\n")
-	err := ioutil.WriteFile(testCredentialsPath, cred, 0644)
-	if err != nil {
-		log.Fatalln(err)
-	}
-}
 
 func removeFiles(files ...string) {
 	for _, file := range files {
@@ -90,41 +80,7 @@ func removeFiles(files ...string) {
 	}
 }
 
-func Test_getCredentials(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		wantUser string
-		wantPass string
-	}{
-		{
-			name:     "success",
-			path:     testCredentialsPath,
-			wantUser: "testuser",
-			wantPass: "testpass",
-		},
-	}
-	setupCredentials()
-	defer removeFiles(testCredentialsPath)
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, got1 := getCredentials(tt.path)
-			if got != tt.wantUser {
-				t.Errorf("getCredentials() got = %v, want %v", got, tt.wantUser)
-			}
-			if got1 != tt.wantPass {
-				t.Errorf("getCredentials() got1 = %v, want %v", got1, tt.wantPass)
-			}
-		})
-	}
-}
-
 func Test_initPrometheusClient(t *testing.T) {
-
-	setupCredentials()
-	defer removeFiles(testCredentialsPath)
-
-	credentialsPath = testCredentialsPath
 	t.Run("success", func(t *testing.T) {
 		initPrometheusClient()
 	})

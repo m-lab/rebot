@@ -6,13 +6,10 @@ attempts to reboot them through iDRAC.
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"flag"
 	"math/rand"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/m-lab/go/memoryless"
@@ -33,10 +30,9 @@ import (
 )
 
 const (
-	defaultMins            = 15
-	defaultCredentialsPath = "/tmp/credentials"
-	defaultHistoryPath     = "/tmp/candidateHistory.json"
-	defaultProject         = "mlab-sandbox"
+	defaultMins        = 15
+	defaultHistoryPath = "/tmp/candidateHistory.json"
+	defaultProject     = "mlab-sandbox"
 
 	// Default timeout for reboot requests. This is intentionally long to
 	// accommodate for nodes that are slow to respond and should be higher
@@ -50,11 +46,12 @@ const (
 var (
 	prom promtest.PromClient
 
-	historyPath     string
-	credentialsPath string
-	rebootAddr      string
-	rebootUsername  string
-	rebootPassword  string
+	historyPath    string
+	rebootAddr     string
+	rebootUsername string
+	rebootPassword string
+	promUsername   string
+	promPassword   string
 
 	dryRun  bool
 	oneshot bool
@@ -106,28 +103,6 @@ var (
 // Rebooter is an interface that allows to test reboot.HTTPRebooter.
 type Rebooter interface {
 	Many([]node.Node) map[string]error
-}
-
-// getCredentials reads the Prometheus API credentials from the
-// provided path.
-// It expects a two line file, with username on the first line and password
-// on the second. Returns a tuple of strings with the first item being the
-// username and second the password.
-//
-// TODO(roberto): get these from env.
-func getCredentials(path string) (string, string) {
-	file, err := os.Open(path)
-	rtx.Must(err, "Cannot open credentials' file")
-	defer file.Close()
-
-	reader := bufio.NewReader(file)
-	username, err := reader.ReadBytes('\n')
-	rtx.Must(err, "Cannot read username from "+credentialsPath)
-
-	password, err := reader.ReadBytes('\n')
-	rtx.Must(err, "Cannot read password from"+credentialsPath)
-
-	return string(bytes.Trim(username, "\n")), string(bytes.Trim(password, "\n"))
 }
 
 // filterRecent filters out nodes that were rebooted less than 24 hours ago.
@@ -191,11 +166,9 @@ func checkAndReboot(h map[string]node.History, rebooter *reboot.HTTPRebooter) {
 // already, thus we won't replace it.
 func initPrometheusClient() {
 	if prom == nil {
-		user, pass := getCredentials(credentialsPath)
-
 		config := api.Config{
-			Address: "https://" + user + ":" + pass + "@prometheus." +
-				project + ".measurementlab.net",
+			Address: "https://" + promUsername + ":" + promPassword +
+				"@prometheus." + project + ".measurementlab.net",
 		}
 
 		client, err := api.NewClient(config)
@@ -209,7 +182,6 @@ func initPrometheusClient() {
 // global variables.
 func init() {
 	historyPath = defaultHistoryPath
-	credentialsPath = defaultCredentialsPath
 
 	log.SetLevel(log.DebugLevel)
 
@@ -225,6 +197,10 @@ func init() {
 		"Username for the Reboot API.")
 	flag.StringVar(&rebootPassword, "reboot.password", "",
 		"Password for the Reboot API.")
+	flag.StringVar(&promUsername, "prometheus.username", "",
+		"Username for Prometheus.")
+	flag.StringVar(&promPassword, "prometheus.password", "",
+		"Password for Prometheus.")
 	flag.StringVar(&project, "project", defaultProject,
 		"Project to use for Prometheus.")
 	flag.DurationVar(&sleepTime, "sleeptime", 30*time.Minute,
