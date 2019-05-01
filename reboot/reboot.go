@@ -2,7 +2,6 @@ package reboot
 
 import (
 	"errors"
-	"io"
 	"io/ioutil"
 	"net/http"
 
@@ -31,13 +30,9 @@ var (
 	)
 
 	// These can be swapped to simplify unit testing.
-	newHTTPRequest = func(method, url string, body io.Reader) (*http.Request, error) {
-		return http.NewRequest(method, url, body)
-	}
-	readAll = func(reader io.Reader) ([]byte, error) {
-		return ioutil.ReadAll(reader)
-	}
-	clientDo = func(r *HTTPRebooter, req *http.Request) (*http.Response, error) {
+	newHTTPRequest = http.NewRequest
+	readAll        = ioutil.ReadAll
+	clientDo       = func(r *HTTPRebooter, req *http.Request) (*http.Response, error) {
 		return r.client.Do(req)
 	}
 )
