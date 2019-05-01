@@ -1,6 +1,7 @@
 package reboot
 
 import (
+	"errors"
 	"io/ioutil"
 	"net/http"
 
@@ -83,7 +84,7 @@ func (r *HTTPRebooter) one(toReboot node.Node) error {
 	if response.StatusCode != http.StatusOK {
 		log.Error(string(body))
 		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
-		return err
+		return errors.New(string(body))
 	}
 
 	metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
@@ -104,7 +105,7 @@ func (r *HTTPRebooter) Many(toReboot []node.Node) map[string]error {
 
 	// If there are more than 5 nodes to be rebooted, do nothing.
 	// TODO(roberto) find a better way to report this case to the caller.
-	if len(toReboot) > 30 {
+	if len(toReboot) > 5 {
 		log.WithFields(log.Fields{"nodes": toReboot}).Error("There are more than 5 nodes offline, skipping.")
 		return errors
 	}
