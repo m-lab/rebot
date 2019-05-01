@@ -77,7 +77,7 @@ func (r *HTTPRebooter) one(toReboot node.Node) error {
 	response, err := clientDo(r, request)
 	if err != nil {
 		log.WithError(err).Error("Cannot send reboot request.")
-		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure-request").Add(1)
 		return err
 	}
 	defer response.Body.Close()
@@ -85,13 +85,13 @@ func (r *HTTPRebooter) one(toReboot node.Node) error {
 	body, err := readAll(response.Body)
 	if err != nil {
 		log.WithError(err).Error(err)
-		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure-read").Add(1)
 		return err
 	}
 
 	if response.StatusCode != http.StatusOK {
 		log.Error(string(body))
-		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure-status").Add(1)
 		return errors.New(string(body))
 	}
 
