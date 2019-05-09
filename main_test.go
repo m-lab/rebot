@@ -153,7 +153,6 @@ func Test_main_oneshot(t *testing.T) {
 	defer restore()
 
 	ctx, cancel = context.WithCancel(context.Background())
-	listenAddr = ":9000"
 
 	// Swap newRebooter to use the Rebooter mock
 	oldNewRebooterFunc := newRebooter
@@ -173,7 +172,6 @@ func Test_main_multi(t *testing.T) {
 	defer restore()
 
 	ctx, cancel = context.WithCancel(context.Background())
-	listenAddr = ":9001"
 
 	go func() {
 		time.Sleep(1 * time.Second)
