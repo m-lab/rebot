@@ -6,18 +6,16 @@ attempts to reboot them through iDRAC.
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"flag"
 	"math/rand"
-	"os"
+	"net/http"
 	"time"
 
+	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/prometheusx"
 
 	"github.com/m-lab/go/flagx"
-	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/rtx"
 	"github.com/m-lab/rebot/healthcheck"
 	"github.com/m-lab/rebot/history"
@@ -25,31 +23,38 @@ import (
 	"github.com/m-lab/rebot/promtest"
 	"github.com/m-lab/rebot/reboot"
 	"github.com/prometheus/client_golang/api"
-	"github.com/prometheus/client_golang/api/prometheus/v1"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
 )
 
 const (
-	defaultMins            = 15
-	defaultCredentialsPath = "/tmp/credentials"
-	defaultHistoryPath     = "/tmp/candidateHistory.json"
-	defaultRebootCmd       = "drac.py"
+	defaultMins        = 15
+	defaultHistoryPath = "/tmp/candidateHistory.json"
+	defaultProject     = "mlab-sandbox"
+
+	// Default timeout for reboot requests. This is intentionally long to
+	// accommodate for nodes that are slow to respond and should be higher
+	// than the Reboot API's BMC connection timeout.
+	clientTimeout = 90 * time.Second
 )
 
 var (
-	config api.Config
-	client api.Client
-	prom   promtest.PromClient
+	prom promtest.PromClient
 
-	historyPath     string
-	credentialsPath string
-	rebootCmd       string
+	historyPath    string
+	rebootAddr     string
+	rebootUsername string
+	rebootPassword string
+	promUsername   string
+	promPassword   string
 
-	dryRun     bool
-	oneshot    bool
+	dryRun  bool
+	oneshot bool
+
 	listenAddr string
+	project    string
 
 	minSleepTime time.Duration
 	maxSleepTime time.Duration
@@ -85,28 +90,16 @@ var (
 	)
 
 	ctx, cancel = context.WithCancel(context.Background())
+
+	newRebooter = func(client *http.Client, baseURL, username,
+		password string) Rebooter {
+		return reboot.NewHTTPRebooter(client, baseURL, username, password)
+	}
 )
 
-// getCredentials reads the Prometheus API credentials from the
-// provided path.
-// It expects a two line file, with username on the first line and password
-// on the second. Returns a tuple of strings with the first item being the
-// username and second the password.
-//
-// TODO(roberto): get these from env.
-func getCredentials(path string) (string, string) {
-	file, err := os.Open(path)
-	rtx.Must(err, "Cannot open credentials' file")
-	defer file.Close()
-
-	reader := bufio.NewReader(file)
-	username, err := reader.ReadBytes('\n')
-	rtx.Must(err, "Cannot read username from "+credentialsPath)
-
-	password, err := reader.ReadBytes('\n')
-	rtx.Must(err, "Cannot read password from"+credentialsPath)
-
-	return string(bytes.Trim(username, "\n")), string(bytes.Trim(password, "\n"))
+// Rebooter is an interface that allows to test reboot.HTTPRebooter.
+type Rebooter interface {
+	Many([]node.Node) map[string]error
 }
 
 // filterRecent filters out nodes that were rebooted less than 24 hours ago.
@@ -133,7 +126,7 @@ func filterRecent(candidates []node.Node, candidateHistory map[string]node.Histo
 }
 
 // checkAndReboot implements Rebot's reboot logic.
-func checkAndReboot(h map[string]node.History) {
+func checkAndReboot(h map[string]node.History, rebooter *reboot.HTTPRebooter) {
 	offline, err := healthcheck.GetRebootable(prom, defaultMins)
 
 	metricOffline.Set(float64(len(offline)))
@@ -151,7 +144,7 @@ func checkAndReboot(h map[string]node.History) {
 	toReboot := filterRecent(offline, h)
 
 	if !dryRun {
-		reboot.Many(rebootCmd, toReboot)
+		rebooter.Many(toReboot)
 	}
 
 	for _, n := range toReboot {
@@ -170,10 +163,9 @@ func checkAndReboot(h map[string]node.History) {
 // already, thus we won't replace it.
 func initPrometheusClient() {
 	if prom == nil {
-		user, pass := getCredentials(credentialsPath)
-
-		config = api.Config{
-			Address: "https://" + user + ":" + pass + "@prometheus.mlab-oti.measurementlab.net",
+		config := api.Config{
+			Address: "https://" + promUsername + ":" + promPassword +
+				"@prometheus." + project + ".measurementlab.net",
 		}
 
 		client, err := api.NewClient(config)
@@ -187,8 +179,6 @@ func initPrometheusClient() {
 // global variables.
 func init() {
 	historyPath = defaultHistoryPath
-	credentialsPath = defaultCredentialsPath
-	rebootCmd = defaultRebootCmd
 
 	log.SetLevel(log.DebugLevel)
 
@@ -198,6 +188,18 @@ func init() {
 		"Execute just once, do not loop.")
 	flag.StringVar(&listenAddr, "listenaddr", ":9999",
 		"Address to listen on for telemetry.")
+	flag.StringVar(&rebootAddr, "reboot.addr", "",
+		"Reboot API instance to send reboot request to.")
+	flag.StringVar(&rebootUsername, "reboot.username", "",
+		"Username for the Reboot API.")
+	flag.StringVar(&rebootPassword, "reboot.password", "",
+		"Password for the Reboot API.")
+	flag.StringVar(&promUsername, "prometheus.username", "",
+		"Username for Prometheus.")
+	flag.StringVar(&promPassword, "prometheus.password", "",
+		"Password for Prometheus.")
+	flag.StringVar(&project, "project", defaultProject,
+		"Project to use for Prometheus.")
 	flag.DurationVar(&sleepTime, "sleeptime", 30*time.Minute,
 		"How long to sleep between reboot attempts on average")
 	// TODO: decide if min and max really need to be so close to avg. Rule of thumb
@@ -214,11 +216,19 @@ func main() {
 	rtx.Must(flagx.ArgsFromEnv(flag.CommandLine), "Could not parse env vars")
 
 	initPrometheusClient()
-	srv := prometheusx.MustStartPrometheus(listenAddr)
+	srv := prometheusx.MustServeMetrics()
 	defer srv.Shutdown(ctx)
 
 	// First, check to see if there's an existing candidate history file.
 	candidateHistory := history.Read(historyPath)
+
+	// Create the HTTP client to send requests to the API.
+	client := &http.Client{
+		Timeout: clientTimeout,
+	}
+
+	// Create the HTTPRebooter.
+	rebooter := reboot.NewHTTPRebooter(client, rebootAddr, rebootUsername, rebootPassword)
 
 	defer cancel()
 
@@ -226,6 +236,6 @@ func main() {
 
 	memoryless.Run(
 		ctx,
-		func() { checkAndReboot(candidateHistory) },
+		func() { checkAndReboot(candidateHistory, rebooter) },
 		memoryless.Config{Min: minSleepTime, Expected: sleepTime, Max: maxSleepTime, Once: oneshot})
 }

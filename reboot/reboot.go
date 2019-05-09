@@ -1,7 +1,9 @@
 package reboot
 
 import (
-	"os/exec"
+	"errors"
+	"io/ioutil"
+	"net/http"
 
 	"github.com/m-lab/rebot/node"
 	"github.com/prometheus/client_golang/prometheus"
@@ -9,15 +11,15 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const rebootCmd = "drac.py"
+// Endpoint for reboot requests, relative to the Reboot API's root.
+const rebootEndpoint = "/v1/reboot"
 
 var (
-	// metricDRACOps is the Prometheus metric to keep track of the number of
-	// DRAC operations executed.
-	metricDRACOps = promauto.NewCounterVec(
+	metricRebootRequests = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "rebot_drac_operations_total",
-			Help: "Total number of DRAC operations run.",
+			Name: "rebot_reboot_requests_total",
+			Help: "Total number of reboot requests sent and " +
+				"corresponding status.",
 		},
 		[]string{
 			"machine",
@@ -26,30 +28,82 @@ var (
 			"status",
 		},
 	)
+
+	// These can be swapped to simplify unit testing.
+	newHTTPRequest = http.NewRequest
+	readAll        = ioutil.ReadAll
+	clientDo       = func(r *HTTPRebooter, req *http.Request) (*http.Response, error) {
+		return r.client.Do(req)
+	}
 )
 
-// one reboots a single machine by calling the reboot command
-// and returns an error if the exit status is not zero.
-func one(rebootCmd string, toReboot node.Node) error {
-	cmd := exec.Command(rebootCmd, "reboot", toReboot.Name)
-	output, err := cmd.Output()
+// HTTPRebooter reboots one of more nodes calling the Reboot API via the
+// provided http.Client.
+type HTTPRebooter struct {
+	client   *http.Client
+	baseURL  string
+	username string
+	password string
+}
 
+// NewHTTPRebooter returns a HTTPRebooter with the provided fields.
+func NewHTTPRebooter(c *http.Client, baseURL, username, password string) *HTTPRebooter {
+	return &HTTPRebooter{
+		client:   c,
+		baseURL:  baseURL + rebootEndpoint,
+		username: username,
+		password: password,
+	}
+}
+
+// one reboots a single machine by send an HTTP request to the Reboot API
+// and returns an error if the response code is not 200 or there is a timeout.
+func (r *HTTPRebooter) one(toReboot node.Node) error {
+	rebootURL := r.baseURL + "?host=" + toReboot.Name
+
+	// Create the HTTP request
+	request, err := newHTTPRequest(http.MethodPost, rebootURL, nil)
 	if err != nil {
-		log.Error(err)
-		metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure").Add(1)
+		log.WithError(err).Error("Cannot create HTTP request.")
 		return err
 	}
 
-	metricDRACOps.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
+	// Add HTTP authentication if needed.
+	if r.username != "" && r.password != "" {
+		request.SetBasicAuth(r.username, r.password)
+	}
 
-	log.Debug(string(output))
-	log.WithFields(log.Fields{"node": toReboot}).Info("Reboot command successfully sent.")
+	// Send the reboot request and check for errors.
+	response, err := clientDo(r, request)
+	if err != nil {
+		log.WithError(err).Error("Cannot send reboot request.")
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure-request").Add(1)
+		return err
+	}
+	defer response.Body.Close()
+
+	body, err := readAll(response.Body)
+	if err != nil {
+		log.WithError(err).Error(err)
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure-read").Add(1)
+		return err
+	}
+
+	if response.StatusCode != http.StatusOK {
+		log.Error(string(body))
+		metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "failure-status").Add(1)
+		return errors.New(string(body))
+	}
+
+	metricRebootRequests.WithLabelValues(toReboot.Name, toReboot.Site, "reboot", "success").Add(1)
+
+	log.WithFields(log.Fields{"node": toReboot.Name}).Debug(string(body))
 	return nil
 }
 
 // Many reboots an array of machines and returns a map of
 // machineName -> error for each element for which the rebootMany failed.
-func Many(rebootCmd string, toReboot []node.Node) map[string]error {
+func (r *HTTPRebooter) Many(toReboot []node.Node) map[string]error {
 	errors := make(map[string]error)
 
 	if len(toReboot) == 0 {
@@ -68,7 +122,7 @@ func Many(rebootCmd string, toReboot []node.Node) map[string]error {
 
 	for _, c := range toReboot {
 		log.WithFields(log.Fields{"node": c}).Info("Rebooting node...")
-		err := one(rebootCmd, c)
+		err := r.one(c)
 		if err != nil {
 			errors[c.Name] = err
 		}
