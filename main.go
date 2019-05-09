@@ -53,8 +53,7 @@ var (
 	dryRun  bool
 	oneshot bool
 
-	listenAddr string
-	project    string
+	project string
 
 	minSleepTime time.Duration
 	maxSleepTime time.Duration
@@ -186,8 +185,6 @@ func init() {
 		"Do not reboot anything, just list.")
 	flag.BoolVar(&oneshot, "oneshot", false,
 		"Execute just once, do not loop.")
-	flag.StringVar(&listenAddr, "listenaddr", ":9999",
-		"Address to listen on for telemetry.")
 	flag.StringVar(&rebootAddr, "reboot.addr", "",
 		"Reboot API instance to send reboot request to.")
 	flag.StringVar(&rebootUsername, "reboot.username", "",
