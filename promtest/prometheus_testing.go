@@ -7,12 +7,13 @@ import (
 	"errors"
 	"time"
 
+	"github.com/prometheus/client_golang/api"
 	"github.com/prometheus/common/model"
 )
 
 // PromClient is Prometheus HTTP client's interface
 type PromClient interface {
-	Query(context.Context, string, time.Time) (model.Value, error)
+	Query(context.Context, string, time.Time) (model.Value, api.Error)
 }
 
 // PrometheusMockClient is a test client that returns fake values only for a
@@ -24,7 +25,7 @@ type PrometheusMockClient struct {
 
 type response struct {
 	value model.Value
-	err   error
+	err   api.Error
 }
 
 // NewPrometheusMockClient creates a mock client to test Prometheus queries.
@@ -35,7 +36,7 @@ func NewPrometheusMockClient() *PrometheusMockClient {
 }
 
 // Register maps a query to the expected model.Value that must be returned.
-func (p *PrometheusMockClient) Register(q string, resp model.Value, err error) {
+func (p *PrometheusMockClient) Register(q string, resp model.Value, err api.Error) {
 	p.responses[q] = response{
 		value: resp,
 		err:   err,
@@ -73,12 +74,12 @@ func CreateSample(labels map[string]string, value float64, t model.Time) *model.
 
 // Query is a mock implementation that returns the model.Value corresponding
 // to the query, if any, or an error.
-func (p PrometheusMockClient) Query(ctx context.Context, q string, t time.Time) (model.Value, error) {
+func (p PrometheusMockClient) Query(ctx context.Context, q string, t time.Time) (model.Value, api.Error) {
 	resp, ok := p.responses[q]
 
 	if ok {
-		return resp.value, resp.err
+		return resp.value, nil
 	}
 
-	return nil, errors.New("Undefined query: " + q)
+	return nil, api.NewErrorAPI(errors.New("Undefined query: "+q), []string{})
 }
