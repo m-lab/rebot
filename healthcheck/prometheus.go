@@ -23,7 +23,7 @@ var CandidatesQuery = `
 		epoxy_last_boot < time() - 900 and epoxy_last_success < epoxy_last_boot
 		, "site", "$1", "machine", "mlab[1-4]-([a-z]{3}[0-9t]{2}).+") OR
 		# machine has been unreachable over SSH for the past 15m and is not currently booting
-		(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[15m]) == 0
+		(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) == 0
 			unless on(machine) epoxy_last_boot > time() - 900)
 	)
 	# Exclude machines in GMX.
@@ -33,7 +33,7 @@ var CandidatesQuery = `
 	# Exclude nodes where the site is in GMX.
 	unless on(site) gmx_site_maintenance == 1
 	# Exclude nodes where the switch is offline.
-	unless on(site) sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0`
+	unless on(site) sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[%[1]dm]) == 0`
 
 // GetOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
