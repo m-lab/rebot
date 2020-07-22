@@ -69,7 +69,7 @@ func TestPrometheusMockClient_Query(t *testing.T) {
 				responses: tt.responses,
 			}
 
-			got, err := p.Query(tt.args.ctx, tt.args.q, tt.args.t)
+			got, _, err := p.Query(tt.args.ctx, tt.args.q, tt.args.t)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("PrometheusMockClient.Query() error = %v, wantErr %v", err, tt.wantErr)
 				return

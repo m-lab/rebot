@@ -39,7 +39,12 @@ var (
 func getOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error) {
 	offline := make(map[string]*model.Sample)
 
-	values, err := prom.Query(context.Background(), SwitchQuery, time.Now())
+	values, warnings, err := prom.Query(context.Background(), SwitchQuery, time.Now())
+	if warnings != nil {
+		for warn := range warnings {
+			log.Warn(warn)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +60,12 @@ func getOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error)
 // getOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
 func getOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error) {
-	values, err := prom.Query(context.Background(), fmt.Sprintf(NodeQuery, minutes), time.Now())
+	values, warnings, err := prom.Query(context.Background(), fmt.Sprintf(NodeQuery, minutes), time.Now())
+	if warnings != nil {
+		for warn := range warnings {
+			log.Warn(warn)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -97,6 +107,9 @@ func filterOfflineSites(sites map[string]*model.Sample, toFilter []node.Node) []
 	return filtered
 }
 
+// GetRebootable makes a list of nodes that are candidates for being rebooted.
+// To do so, it queries both offline nodes and offline sites and returns
+// offline nodes that are not part of offline sites.
 func GetRebootable(prom promtest.PromClient, minutes int) ([]node.Node, error) {
 	// Query for offline switches
 	sites, err := getOfflineSites(prom)
