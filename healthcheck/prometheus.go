@@ -11,50 +11,34 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-var (
-	// NodeQuery is a Prometheus query to determine what nodes aren't reachable
-	// on any of the currently used SSH ports (22 or 806). Additional filtering
-	// based on gmx maintenance, lame-duck mode, or the presence of recent NDT
-	// tests on the node is applied. This makes sure we never reboot a node
-	// unnecessarily or lose data.
-	NodeQuery = `sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%dm]) == 0
-					unless on(machine) gmx_machine_maintenance == 1
-					unless on(site) gmx_site_maintenance == 1
-					unless on (machine) kube_node_spec_taint{key="lame-duck"} == 1`
+// CandidatesQuery is a Prometheus query to determine what machines need to
+// be rebooted. A machine is to be rebooted if it's unreachable via SSH or
+// it's taking too long to boot, unless it's in GMX, lame-duck or its whole
+// site is currently offline.
+var CandidatesQuery = `
+	(
+		# machine booted > 15m ago but hasn't reported success yet.
+		# The label_replace is needed because the epoxy_* metrics lack "site".
+		label_replace(
+		epoxy_last_boot < time() - 900 and epoxy_last_success < epoxy_last_boot
+		, "site", "$1", "machine", "mlab[1-4]-([a-z]{3}[0-9t]{2}).+") OR
+		# machine has been unreachable over SSH for the past 15m and is not currently booting
+		(sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[15m]) == 0
+			unless on(machine) epoxy_last_boot > time() - 900)
+	)
+	# Exclude machines in GMX.
+	unless on(machine) gmx_machine_maintenance == 1
+	# Exclude lame-ducked Kubernetes nodes.
+	unless on (machine) kube_node_spec_taint{key="lame-duck"} == 1
+	# Exclude nodes where the site is in GMX.
+	unless on(site) gmx_site_maintenance == 1
+	# Exclude nodes where the switch is offline.
+	unless on(site) sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0`
 
-	// SwitchQuery is a prometheus query to determine what switches are
-	// offline.  To determine if a switch is offline, pings are generally
-	// more reliable than SNMP scraping.
-	SwitchQuery = `sum_over_time(probe_success{instance=~"s1.*", module="icmp"}[15m]) == 0 unless on(site) gmx_site_maintenance == 1`
-)
-
-// getOfflineSites checks for offline switches in the last N minutes.
-// It returns a sitename -> Sample map.
-func getOfflineSites(prom promtest.PromClient) (map[string]*model.Sample, error) {
-	offline := make(map[string]*model.Sample)
-
-	values, warnings, err := prom.Query(context.Background(), SwitchQuery, time.Now())
-	if warnings != nil {
-		for warn := range warnings {
-			log.Warn(warn)
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	for _, s := range values.(model.Vector) {
-		offline[string(s.Metric["site"])] = s
-		log.WithFields(log.Fields{"site": s.Metric["site"]}).Warn("Offline switch found.")
-	}
-
-	return offline, err
-}
-
-// getOfflineNodes checks for offline nodes in the last N minutes.
+// GetOfflineNodes checks for offline nodes in the last N minutes.
 // It returns a Vector of samples.
-func getOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error) {
-	values, warnings, err := prom.Query(context.Background(), fmt.Sprintf(NodeQuery, minutes), time.Now())
+func GetOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error) {
+	values, warnings, err := prom.Query(context.Background(), fmt.Sprintf(CandidatesQuery, minutes), time.Now())
 	if warnings != nil {
 		for warn := range warnings {
 			log.Warn(warn)
@@ -81,44 +65,4 @@ func getOfflineNodes(prom promtest.PromClient, minutes int) ([]node.Node, error)
 	}
 
 	return candidates, nil
-}
-
-func filterOfflineSites(sites map[string]*model.Sample, toFilter []node.Node) []node.Node {
-
-	filtered := make([]node.Node, 0)
-
-	for _, c := range toFilter {
-		// Ignore machines in sites where the switch is offline.
-		site := c.Site
-		machine := c.Name
-		if _, ok := sites[site]; !ok {
-			filtered = append(filtered, c)
-		} else {
-			log.Info("Ignoring " + machine + " as the switch is offline.")
-		}
-	}
-
-	return filtered
-}
-
-// GetRebootable makes a list of nodes that are candidates for being rebooted.
-// To do so, it queries both offline nodes and offline sites and returns
-// offline nodes that are not part of offline sites.
-func GetRebootable(prom promtest.PromClient, minutes int) ([]node.Node, error) {
-	// Query for offline switches
-	sites, err := getOfflineSites(prom)
-	if err != nil {
-		log.Error("Unable to retrieve offline sites from Prometheus")
-		return nil, err
-	}
-
-	// Query for offline nodes
-	nodes, err := getOfflineNodes(prom, minutes)
-	if err != nil {
-		log.Error("Unable to retrieve offline nodes from Prometheus")
-		return nil, err
-	}
-
-	offline := filterOfflineSites(sites, nodes)
-	return offline, nil
 }

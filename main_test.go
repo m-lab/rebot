@@ -36,16 +36,6 @@ func (r *MockRebooter) Many([]node.Node) map[string]error {
 func init() {
 	now := model.Time(time.Now().Unix())
 	fakeProm = promtest.NewPrometheusMockClient()
-	fakeOfflineSwitch := promtest.CreateSample(map[string]string{
-		"instance": "s1.iad0t.measurement-lab.org",
-		"job":      "blackbox-targets",
-		"module":   "icmp",
-		"site":     "iad0t",
-	}, 0, now)
-
-	offlineSwitches := model.Vector{
-		fakeOfflineSwitch,
-	}
 
 	fakeOfflineNode := promtest.CreateSample(map[string]string{
 		"instance": "mlab1.iad0t.measurement-lab.org:806",
@@ -60,8 +50,7 @@ func init() {
 		fakeOfflineNode,
 	}
 
-	fakeProm.Register(healthcheck.SwitchQuery, offlineSwitches, nil)
-	fakeProm.Register(fmt.Sprintf(healthcheck.NodeQuery, testMins), offlineNodes, nil)
+	fakeProm.Register(fmt.Sprintf(healthcheck.CandidatesQuery, testMins), offlineNodes, nil)
 
 	prom = fakeProm
 }

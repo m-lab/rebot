@@ -127,7 +127,7 @@ func filterRecent(candidates []node.Node, candidateHistory map[string]node.Histo
 
 // checkAndReboot implements Rebot's reboot logic.
 func checkAndReboot(h map[string]node.History, rebooter *reboot.HTTPRebooter) {
-	offline, err := healthcheck.GetRebootable(prom, defaultMins)
+	offline, err := healthcheck.GetOfflineNodes(prom, defaultMins)
 
 	metricOffline.Set(float64(len(offline)))
 
