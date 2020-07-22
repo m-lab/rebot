@@ -17,16 +17,10 @@ var (
 	// based on gmx maintenance, lame-duck mode, or the presence of recent NDT
 	// tests on the node is applied. This makes sure we never reboot a node
 	// unnecessarily or lose data.
-	NodeQuery = `sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) == 0
-			unless on (machine)
-				sum_over_time(probe_success{service="ssh806", module="ssh_v4_online"}[%[1]dm]) > 0
-			unless on(machine) gmx_machine_maintenance == 1
-			unless on(site) gmx_site_maintenance == 1
-			unless on (machine) lame_duck_node == 1
-			unless on (machine) kube_node_spec_taint{key="lame-duck"} == 1
-			unless on (machine) count_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%[1]dm]) < 14
-			unless on (machine) rate(inotify_extension_create_total{ext=".s2c_snaplog"}[%[1]dm]) > 0
-			unless on (machine) increase(ndt_test_total[%[1]dm]) > 0`
+	NodeQuery = `sum_over_time(probe_success{service="ssh", module="ssh_v4_online"}[%dm]) == 0
+					unless on(machine) gmx_machine_maintenance == 1
+					unless on(site) gmx_site_maintenance == 1
+					unless on (machine) kube_node_spec_taint{key="lame-duck"} == 1`
 
 	// SwitchQuery is a prometheus query to determine what switches are
 	// offline.  To determine if a switch is offline, pings are generally
