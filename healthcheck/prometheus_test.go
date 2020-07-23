@@ -80,11 +80,11 @@ func Test_GetOfflineNodes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := GetOfflineNodes(tt.prom, tt.minutes)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getOfflineNodes() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetOfflineNodes() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getOfflineNodes() = %v, want %v", got, tt.want)
+				t.Errorf("GetOfflineNodes() = %v, want %v", got, tt.want)
 			}
 		})
 	}
