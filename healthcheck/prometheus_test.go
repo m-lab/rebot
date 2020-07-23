@@ -37,10 +37,6 @@ func init() {
 		"site":     "iad0t",
 	}, 0, now)
 
-	var offlineSwitches = model.Vector{
-		fakeOfflineSwitch,
-	}
-
 	fakeOfflineNode = promtest.CreateSample(map[string]string{
 		"instance": "mlab1.iad0t.measurement-lab.org:806",
 		"job":      "blackbox-targets",
@@ -54,45 +50,10 @@ func init() {
 		fakeOfflineNode,
 	}
 
-	fakeProm.Register(SwitchQuery, offlineSwitches, nil)
-	fakeProm.Register(fmt.Sprintf(NodeQuery, testMins), offlineNodes, nil)
+	fakeProm.Register(fmt.Sprintf(CandidatesQuery, testMins), offlineNodes, nil)
 }
 
-func Test_getOfflineSites(t *testing.T) {
-	tests := []struct {
-		name    string
-		prom    promtest.PromClient
-		want    map[string]*model.Sample
-		wantErr bool
-	}{
-		{
-			name: "success",
-			want: map[string]*model.Sample{
-				"iad0t": fakeOfflineSwitch,
-			},
-			prom: fakeProm,
-		},
-		{
-			name:    "error",
-			prom:    fakePromErr,
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := getOfflineSites(tt.prom)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getOfflineSites() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getOfflineSites() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_getOfflineNodes(t *testing.T) {
+func Test_GetOfflineNodes(t *testing.T) {
 	tests := []struct {
 		name    string
 		prom    promtest.PromClient
@@ -117,94 +78,14 @@ func Test_getOfflineNodes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getOfflineNodes(tt.prom, tt.minutes)
+			got, err := GetOfflineNodes(tt.prom, tt.minutes)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getOfflineNodes() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetOfflineNodes() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getOfflineNodes() = %v, want %v", got, tt.want)
+				t.Errorf("GetOfflineNodes() = %v, want %v", got, tt.want)
 			}
 		})
 	}
-}
-
-func Test_filterOfflineSites(t *testing.T) {
-
-	candidates := []node.Node{
-		node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
-	}
-
-	tests := []struct {
-		name       string
-		sites      map[string]*model.Sample
-		candidates []node.Node
-		want       []node.Node
-	}{
-		{
-			name: "success-filtered-node-when-site-offline",
-			sites: map[string]*model.Sample{
-				"iad0t": fakeOfflineSwitch,
-			},
-			candidates: candidates,
-			want:       []node.Node{},
-		},
-		{
-			name: "success-offline-node-returned",
-			sites: map[string]*model.Sample{
-				"iad1t": fakeOfflineSwitch,
-			},
-			candidates: candidates,
-			want: []node.Node{
-				node.New("mlab1.iad0t.measurement-lab.org", "iad0t"),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := filterOfflineSites(tt.sites, tt.candidates); !(len(got) == 0 && len(tt.want) == 0) && !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("filterOfflineSites() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGetRebootable(t *testing.T) {
-
-	t.Run("success", func(t *testing.T) {
-		got, err := GetRebootable(fakeProm, testMins)
-
-		if err != nil {
-			t.Errorf("GetRebootable() error = %v, wantErr %v", err, false)
-			return
-		}
-
-		if !reflect.DeepEqual(got, []node.Node{}) {
-			t.Errorf("GetRebootable() = %v, want %v", got, []node.Node{})
-		}
-	})
-
-	t.Run("error-retrieving-sites", func(t *testing.T) {
-		_, err := GetRebootable(fakePromErr, testMins)
-
-		if err == nil {
-			t.Errorf("GetRebootable() error = %v, wantErr %v", err, true)
-			return
-		}
-	})
-
-	// Unregister nodes query from the fake client
-	restore := fakeProm.Unregister(fmt.Sprintf(NodeQuery, testMins))
-
-	t.Run("error-retrieving-nodes", func(t *testing.T) {
-		_, err := GetRebootable(fakeProm, testMins)
-
-		if err == nil {
-			t.Errorf("GetRebootable() error = %v, wantErr %v", err, true)
-			return
-		}
-	})
-
-	restore()
-
 }
