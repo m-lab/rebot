@@ -12,6 +12,10 @@ import (
 	"net/http"
 	"time"
 
+	"golang.org/x/oauth2/google"
+
+	"google.golang.org/api/idtoken"
+
 	"github.com/m-lab/go/memoryless"
 	"github.com/m-lab/go/prometheusx"
 
@@ -47,8 +51,10 @@ var (
 	rebootAddr     string
 	rebootUsername string
 	rebootPassword string
-	promUsername   string
-	promPassword   string
+
+	credentials  string
+	promUsername string
+	promPassword string
 
 	dryRun  bool
 	oneshot bool
@@ -158,20 +164,65 @@ func checkAndReboot(h map[string]node.History, rebooter *reboot.HTTPRebooter) {
 
 }
 
-// initPrometheusClient initializes a Prometheus client with HTTP basic
-// authentication. If we are running main() in a test, prom will be set
-// already, thus we won't replace it.
+func makeIDTokenClient(audience string) (*http.Client, error) {
+	// Look for default credentials. If available, try using them to get
+	// an ID token and authenticate subsequent requests.
+	// This is done transparently by the idtoken.Client RoundTripper.
+	defaultCreds, err := google.FindDefaultCredentials(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	clientOption := idtoken.WithCredentialsJSON(defaultCreds.JSON)
+	client, err := idtoken.NewClient(context.Background(),
+		audience, clientOption)
+	if err != nil {
+		// invalid credentials file or not a service account.
+		return nil, err
+	}
+	return client, nil
+}
+
+// initPrometheusClient initializes the Prometheus client used throughout the
+// program.
+//
+// The underlying HTTP client automatically includes an Authorization field if:
+// 1. Command-line flags prometheus.* have been passed: in such case, the field
+// 	will contain an HTTP basic authentication string.
+// 2. Google Application Default Credentials for a Service Account have been
+// 	passed: the field will contain a Google ID Token identifying the user.
 func initPrometheusClient() {
+	// If we are running main() in a test, prom will be set
+	// already, thus we won't replace it.
 	if prom == nil {
-		config := api.Config{
-			Address: "https://" + promUsername + ":" + promPassword +
-				"@prometheus." + project + ".measurementlab.net",
+		var config api.Config
+		if promUsername != "" && promPassword != "" {
+			// HTTP basic authentication.
+			log.Info("Prometheus client will use HTTP basic auth.")
+			config = api.Config{
+				Address: "https://" + promUsername + ":" + promPassword +
+					"@prometheus." + project + ".measurementlab.net",
+			}
+		} else {
+			config = api.Config{
+				Address: "https://prometheus." + project +
+					".measurementlab.net",
+			}
+
+			// Look for default credentials. If available, try using them to get
+			// an ID token and authenticate subsequent requests.
+			// This is done transparently by the idtoken.Client RoundTripper.
+			client, err := makeIDTokenClient(config.Address)
+			if err != nil {
+				log.Warnf("Cannot use default credentials: %v", err)
+				log.Warn("No auth method available for the Prometheus client.")
+			} else {
+				config.RoundTripper = client.Transport
+			}
 		}
 
-		client, err := api.NewClient(config)
-		rtx.Must(err, "Unable to initialize a new client!")
-
-		prom = v1.NewAPI(client)
+		promClient, err := api.NewClient(config)
+		rtx.Must(err, "Cannot init Prometheus client")
+		prom = v1.NewAPI(promClient)
 	}
 }
 
