@@ -165,7 +165,7 @@ func initPrometheusClient() {
 	if prom == nil {
 		config := api.Config{
 			Address: "https://" + promUsername + ":" + promPassword +
-				"@prometheus." + project + ".measurementlab.net",
+				"@prometheus-basicauth." + project + ".measurementlab.net",
 		}
 
 		client, err := api.NewClient(config)
